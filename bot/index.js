@@ -4,6 +4,8 @@ const path = require('path');
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { processLootMessage, processDeathMessage } = require('./messageProcessor');
 const { registerCommands } = require('./deploy-commands');
+const itemData = require('./itemData');
+const bankPings = require('./bankPings');
 
 const LOOT_CHANNEL_ID = process.env.LOOT_CHANNEL_ID;
 const DEATH_CHANNEL_ID = process.env.DEATH_CHANNEL_ID;
@@ -32,6 +34,9 @@ client.once('clientReady', async () => {
   } else {
     console.warn('[commands] CLIENT_ID not set — skipping slash command registration');
   }
+
+  itemData.start();
+  bankPings.start(client);
 });
 
 client.on('interactionCreate', async (interaction) => {
