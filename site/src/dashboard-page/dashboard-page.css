@@ -80,37 +80,97 @@ dashboard-page {
 }
 
 .dashboard-page__card h3 {
-  margin: 0 0 14px 0;
-  font-size: 1.5em;
-  border-bottom: 1px solid var(--light-border);
-  padding-bottom: 10px;
-}
-
-.dashboard-page__wom {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.dashboard-page__wom-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  margin: 0 0 12px 0;
+  font-size: 1.4em;
   text-align: center;
-  gap: 2px;
+}
+
+.dashboard-page__tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--light-border);
+}
+
+.dashboard-page__tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--primary-text);
+  opacity: 0.55;
+  font-family: "rssmall";
   font-size: 1em;
+  padding: 6px 0;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
 }
 
-.dashboard-page__wom-label {
-  opacity: 0.6;
+.dashboard-page__tab:hover {
+  opacity: 0.85;
+}
+
+.dashboard-page__tab--active {
+  opacity: 1;
+  color: var(--orange);
+  border-bottom-color: var(--orange);
+}
+
+.dashboard-page__tab-panel--hidden {
+  display: none;
+}
+
+.dashboard-page__stats-total {
+  font-size: 1.15em;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 14px;
+  color: var(--orange);
+}
+
+.dashboard-page__stats-columns {
+  display: flex;
+  gap: 14px;
+}
+
+.dashboard-page__stats-column {
+  flex: 1 1 50%;
+  min-width: 0;
+}
+
+.dashboard-page__stats-column h4 {
+  margin: 0 0 6px 0;
+  font-size: 0.75em;
+  opacity: 0.55;
   text-transform: uppercase;
-  font-size: 0.8em;
   letter-spacing: 0.03em;
+  text-align: center;
 }
 
-.dashboard-page__wom-value {
-  font-weight: 500;
+.dashboard-page__stats-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dashboard-page__stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 2px;
+  font-size: 0.82em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-page__stats-row:last-child {
+  border-bottom: none;
+}
+
+.dashboard-page__stats-value {
+  opacity: 0.7;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .dashboard-page__activity {

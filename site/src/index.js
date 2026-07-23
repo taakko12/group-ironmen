@@ -43,7 +43,6 @@ import "./skill-graph/skill-graph.js";
 import "./loot-page/loot-page.js";
 import "./death-page/death-page.js";
 import "./dashboard-page/dashboard-page.js";
-import "./stats-page/stats-page.js";
 import "./confirm-dialog/confirm-dialog.js";
 import "./panels-page/panels-page.js";
 import "./diary-dialog/diary-dialog.js";

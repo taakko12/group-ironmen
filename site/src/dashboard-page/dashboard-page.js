@@ -73,39 +73,84 @@ export class DashboardPage extends BaseElement {
         return `
 <div class="dashboard-page__card rsborder rsbackground">
   <h3>${member.name}</h3>
-  <div class="dashboard-page__wom">
-    <div class="dashboard-page__wom-stat">
-      <span class="dashboard-page__wom-label">Top Skill</span>
-      <span class="dashboard-page__wom-value">${DashboardPage.topSkillHtml(gains)}</span>
-    </div>
-    <div class="dashboard-page__wom-stat">
-      <span class="dashboard-page__wom-label">Top Boss</span>
-      <span class="dashboard-page__wom-value">${DashboardPage.topBossHtml(gains)}</span>
+  <div class="dashboard-page__tabs">
+    <button type="button" class="dashboard-page__tab dashboard-page__tab--active" data-tab="overview">Overview</button>
+    <button type="button" class="dashboard-page__tab" data-tab="stats">Stats</button>
+  </div>
+  <div class="dashboard-page__tab-panel" data-panel="overview">
+    <div class="dashboard-page__activity">
+      <div class="dashboard-page__activity-item">
+        <h4>Most Recent Drop</h4>
+        ${DashboardPage.recentDropHtml(mostRecentDrop)}
+      </div>
+      <div class="dashboard-page__activity-item">
+        <h4>Most Recent Death</h4>
+        ${DashboardPage.recentDeathHtml(mostRecentDeath)}
+      </div>
     </div>
   </div>
-  <div class="dashboard-page__activity">
-    <div class="dashboard-page__activity-item">
-      <h4>Most Recent Drop</h4>
-      ${DashboardPage.recentDropHtml(mostRecentDrop)}
-    </div>
-    <div class="dashboard-page__activity-item">
-      <h4>Most Recent Death</h4>
-      ${DashboardPage.recentDeathHtml(mostRecentDeath)}
+  <div class="dashboard-page__tab-panel dashboard-page__tab-panel--hidden" data-panel="stats">
+    <div class="dashboard-page__stats-total">${DashboardPage.totalXpHtml(gains)}</div>
+    <div class="dashboard-page__stats-columns">
+      <div class="dashboard-page__stats-column">
+        <h4>Skills</h4>
+        ${DashboardPage.skillsGainedHtml(gains)}
+      </div>
+      <div class="dashboard-page__stats-column">
+        <h4>Bosses</h4>
+        ${DashboardPage.bossesGainedHtml(gains)}
+      </div>
     </div>
   </div>
 </div>`;
       })
       .join("");
+
+    for (const tab of this.cardsContainer.querySelectorAll(".dashboard-page__tab")) {
+      this.eventListener(tab, "click", this.handleTabClick.bind(this));
+    }
   }
 
-  static topSkillHtml(gains) {
-    if (!gains || !gains.top_skill_name) return '<span class="dashboard-page__no-data">No data</span>';
-    return `${gains.top_skill_name} (+${gains.top_skill_xp.toLocaleString()} xp)`;
+  handleTabClick(event) {
+    const button = event.currentTarget;
+    const card = button.closest(".dashboard-page__card");
+    const tab = button.dataset.tab;
+
+    for (const b of card.querySelectorAll(".dashboard-page__tab")) {
+      b.classList.toggle("dashboard-page__tab--active", b === button);
+    }
+    for (const panel of card.querySelectorAll(".dashboard-page__tab-panel")) {
+      panel.classList.toggle("dashboard-page__tab-panel--hidden", panel.dataset.panel !== tab);
+    }
   }
 
-  static topBossHtml(gains) {
-    if (!gains || !gains.top_boss_name) return '<span class="dashboard-page__no-data">No data</span>';
-    return `${gains.top_boss_name} (${gains.top_boss_kills.toLocaleString()} kc)`;
+  static totalXpHtml(gains) {
+    if (!gains || !gains.xp_gained) return '<span class="dashboard-page__no-data">No XP gained</span>';
+    return `+${gains.xp_gained.toLocaleString()} XP`;
+  }
+
+  static skillsGainedHtml(gains) {
+    if (!gains || !gains.skills_gained || gains.skills_gained.length === 0) {
+      return '<div class="dashboard-page__no-data">No data</div>';
+    }
+    return `<div class="dashboard-page__stats-list">${gains.skills_gained
+      .map(
+        (s) =>
+          `<div class="dashboard-page__stats-row"><span>${s.name}</span><span class="dashboard-page__stats-value">+${s.xp.toLocaleString()} xp</span></div>`
+      )
+      .join("")}</div>`;
+  }
+
+  static bossesGainedHtml(gains) {
+    if (!gains || !gains.bosses_gained || gains.bosses_gained.length === 0) {
+      return '<div class="dashboard-page__no-data">No data</div>';
+    }
+    return `<div class="dashboard-page__stats-list">${gains.bosses_gained
+      .map(
+        (b) =>
+          `<div class="dashboard-page__stats-row"><span>${b.name}</span><span class="dashboard-page__stats-value">${b.kills.toLocaleString()} kc</span></div>`
+      )
+      .join("")}</div>`;
   }
 
   static recentDropHtml(drop) {
