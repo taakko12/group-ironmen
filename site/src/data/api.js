@@ -39,6 +39,14 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/get-skill-data`;
   }
 
+  get lootDataUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/get-loot-data`;
+  }
+
+  get deathDataUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/get-death-data`;
+  }
+
   get captchaEnabledUrl() {
     return `${this.baseUrl}/captcha-enabled`;
   }
@@ -192,6 +200,24 @@ class Api {
 
   async getCaptchaEnabled() {
     const response = await fetch(this.captchaEnabledUrl);
+    return response.json();
+  }
+
+  async getLootData() {
+    const response = await fetch(this.lootDataUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
+  }
+
+  async getDeathData() {
+    const response = await fetch(this.deathDataUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
     return response.json();
   }
 }
