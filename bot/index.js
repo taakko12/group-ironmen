@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { processLootMessage, processDeathMessage } = require('./messageProcessor');
+const { registerCommands } = require('./deploy-commands');
 
 const LOOT_CHANNEL_ID = process.env.LOOT_CHANNEL_ID;
 const DEATH_CHANNEL_ID = process.env.DEATH_CHANNEL_ID;
@@ -20,8 +21,17 @@ if (fs.existsSync(commandsPath)) {
   }
 }
 
-client.once('clientReady', () => {
+client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag} (${client.commands.size} command(s) loaded)`);
+  if (process.env.CLIENT_ID) {
+    try {
+      await registerCommands();
+    } catch (err) {
+      console.error(`[commands] Failed to register: ${err.message}`);
+    }
+  } else {
+    console.warn('[commands] CLIENT_ID not set — skipping slash command registration');
+  }
 });
 
 client.on('interactionCreate', async (interaction) => {
