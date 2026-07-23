@@ -28,4 +28,8 @@ function postDeath(death) {
   return post('/death', death);
 }
 
-module.exports = { postLootDrop, postDeath };
+function postStorageLog(entry) {
+  return post('/storage-log', entry);
+}
+
+module.exports = { postLootDrop, postDeath, postStorageLog };

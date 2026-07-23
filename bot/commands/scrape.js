@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { dateToSnowflake, fetchAllMessages } = require('../dinkParser');
-const { processLootMessage, processDeathMessage } = require('../messageProcessor');
+const { processLootMessage, processDeathMessage, processGroupStorageMessage } = require('../messageProcessor');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -34,6 +34,8 @@ module.exports = {
     let lootRecorded = 0;
     let deathMessageCount = 0;
     let deathRecorded = 0;
+    let storageMessageCount = 0;
+    let storageRecorded = 0;
 
     if (process.env.LOOT_CHANNEL_ID) {
       const channel = await interaction.client.channels.fetch(process.env.LOOT_CHANNEL_ID).catch(() => null);
@@ -59,8 +61,20 @@ module.exports = {
       }
     }
 
+    if (process.env.GROUP_STORAGE_CHANNEL_ID) {
+      const channel = await interaction.client.channels.fetch(process.env.GROUP_STORAGE_CHANNEL_ID).catch(() => null);
+      if (channel) {
+        const messages = await fetchAllMessages(channel, afterSnowflake);
+        storageMessageCount = messages.length;
+        for (const message of messages) {
+          if (!message.webhookId) continue;
+          storageRecorded += await processGroupStorageMessage(message);
+        }
+      }
+    }
+
     await interaction.editReply(
-      `✅ Scrape complete (${periodLabel}) — scanned ${lootMessageCount.toLocaleString()} loot messages (${lootRecorded} drops) and ${deathMessageCount.toLocaleString()} death messages (${deathRecorded} deaths). Duplicates are skipped automatically.`
+      `✅ Scrape complete (${periodLabel}) — scanned ${lootMessageCount.toLocaleString()} loot messages (${lootRecorded} drops), ${deathMessageCount.toLocaleString()} death messages (${deathRecorded} deaths), and ${storageMessageCount.toLocaleString()} group storage messages (${storageRecorded} transactions). Duplicates are skipped automatically.`
     );
   },
 };

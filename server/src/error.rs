@@ -42,6 +42,10 @@ pub enum ApiError {
     RequestBankError(tokio_postgres::error::Error),
     #[from(ignore)]
     PollBankPingsError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    AddStorageLogError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    GetStorageLogError(tokio_postgres::error::Error),
     GroupFullError,
     UreqError(ureq::Error),
     GroupMemberValidationError(String),
@@ -82,6 +86,8 @@ impl ResponseError for ApiError {
             ApiError::MustBankItemError(ref err) => handle_pg_error(err, "MustBankItemError"),
             ApiError::RequestBankError(ref err) => handle_pg_error(err, "RequestBankError"),
             ApiError::PollBankPingsError(ref err) => handle_pg_error(err, "PollBankPingsError"),
+            ApiError::AddStorageLogError(ref err) => handle_pg_error(err, "AddStorageLogError"),
+            ApiError::GetStorageLogError(ref err) => handle_pg_error(err, "GetStorageLogError"),
             ApiError::DeleteGroupMemberError(ref err) => {
                 handle_pg_error(err, "DeleteGroupMemberError")
             }

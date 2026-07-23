@@ -184,6 +184,61 @@ function parseDeathMessage(message) {
   return null;
 }
 
+// Dink's default Group Storage message template is:
+//   "%USERNAME% has deposited:\n%DEPOSITED%\n\n%USERNAME% has withdrawn:\n%WITHDRAWN%"
+// wrapped in a ```diff code block, where %DEPOSITED%/%WITHDRAWN% are each
+// either "N/A" or one "+ N x Item Name (value)" / "- N x Item Name (value)"
+// line per item (value is omitted if price-inclusion is disabled).
+function isGroupStorageEmbed(embed) {
+  const text = embed.description ?? '';
+  return /has deposited:|has withdrawn:/i.test(text);
+}
+
+function parseGroupStorageEmbed(embed) {
+  const raw = (embed.description ?? '').replace(/```diff|```/g, '');
+  const lines = raw.split('\n');
+
+  let player = null;
+  let section = null;
+  const deposits = [];
+  const withdrawals = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const depositHeader = line.match(/^(.+?)\s+has deposited:$/i);
+    const withdrawHeader = line.match(/^(.+?)\s+has withdrawn:$/i);
+
+    if (depositHeader) {
+      player = player ?? normalizeName(depositHeader[1]);
+      section = 'deposits';
+      continue;
+    }
+    if (withdrawHeader) {
+      player = player ?? normalizeName(withdrawHeader[1]);
+      section = 'withdrawals';
+      continue;
+    }
+    if (!section || line === '' || /^N\/A$/i.test(line)) continue;
+
+    const itemMatch = line.match(/^[+-]\s*(\d+)\s*x\s+(.+?)(?:\s+\(([\d.,]+[KMBkmb]?)\))?$/);
+    if (!itemMatch) continue;
+
+    const entry = {
+      item: itemMatch[2].trim(),
+      quantity: parseInt(itemMatch[1], 10),
+      gpValue: itemMatch[3] ? parseGpString(itemMatch[3]) : null,
+    };
+    (section === 'deposits' ? deposits : withdrawals).push(entry);
+  }
+
+  if (!player) {
+    const authorName = embed.author?.name ?? '';
+    if (authorName) player = normalizeName(authorName);
+  }
+
+  return { player, deposits, withdrawals };
+}
+
 module.exports = {
   isLootEmbed,
   parseLootItems,
@@ -192,6 +247,8 @@ module.exports = {
   parseLootPlayer,
   parseDeathMessage,
   parseDeathImage,
+  isGroupStorageEmbed,
+  parseGroupStorageEmbed,
   dateToSnowflake,
   fetchAllMessages,
 };

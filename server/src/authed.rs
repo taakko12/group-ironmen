@@ -2,9 +2,10 @@ use crate::auth_middleware::Authenticated;
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{
-    AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData, MustBankItem,
-    NameChange, NewDeath, NewLootDrop, PendingBankPing, RenameGroupMember, RequestBank,
-    SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
+    AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
+    GroupStorageLog, MustBankItem, NameChange, NewDeath, NewLootDrop, NewStorageLogEntry,
+    PendingBankPing, RenameGroupMember, RequestBank, SetMemberDiscordId, WomPlayerGains,
+    SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
 use crate::wom;
@@ -253,6 +254,27 @@ pub async fn get_death_data(
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let death_data = db::get_death_data(&client, auth.group_id).await?;
     Ok(web::Json(death_data))
+}
+
+#[post("/storage-log")]
+pub async fn add_storage_log_entry(
+    auth: Authenticated,
+    entry: web::Json<NewStorageLogEntry>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::add_storage_log_entry(&client, auth.group_id, &entry.into_inner()).await?;
+    Ok(HttpResponse::Created().finish())
+}
+
+#[get("/get-storage-log")]
+pub async fn get_storage_log(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<GroupStorageLog>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let storage_log = db::get_storage_log(&client, auth.group_id).await?;
+    Ok(web::Json(storage_log))
 }
 
 #[put("/member-discord-id")]

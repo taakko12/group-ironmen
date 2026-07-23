@@ -1,0 +1,67 @@
+storage-log-page {
+  display: block;
+}
+
+.storage-log-page__control-container {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.storage-log-page__panel {
+  margin-top: 12px;
+  box-sizing: border-box;
+  padding: 12px;
+}
+
+.storage-log-page__panel h3 {
+  margin-top: 0;
+}
+
+.storage-log-page__log table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.storage-log-page__log th {
+  text-align: left;
+  opacity: 0.8;
+  padding-right: 6px;
+}
+
+.storage-log-page__log td {
+  padding: 5px 6px 5px 0;
+  border-bottom: 1px solid var(--light-border);
+}
+
+.storage-log-page__log a {
+  color: var(--primary-text);
+}
+
+.storage-log-page__log a:hover {
+  text-decoration: underline;
+}
+
+.storage-log-page__action {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.storage-log-page__action--deposit {
+  background: rgba(60, 179, 90, 0.18);
+  color: #7bd68a;
+}
+
+.storage-log-page__action--withdraw {
+  background: rgba(217, 83, 63, 0.18);
+  color: #e08b7c;
+}
+
+.storage-log-page__no-data {
+  opacity: 0.5;
+  font-style: italic;
+  padding: 8px 0;
+}

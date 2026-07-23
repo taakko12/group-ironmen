@@ -140,6 +140,43 @@ pub struct MemberDeathData {
 }
 pub type GroupDeathData = Vec<MemberDeathData>;
 
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageLogAction {
+    Deposit,
+    Withdraw,
+}
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct NewStorageLogEntry {
+    pub member_name: String,
+    /// Resolved by the bot from Dink's item name text via the same item
+    /// database the site uses. Omitted (rather than erroring) when the name
+    /// can't be resolved, since the log entry is still worth recording even
+    /// if the cached-snapshot correction below has to be skipped.
+    pub item_id: Option<i32>,
+    pub item_name: String,
+    pub quantity: i32,
+    pub action: StorageLogAction,
+    pub gp_value: Option<i64>,
+    pub message_link: Option<String>,
+    pub discord_message_id: Option<String>,
+    #[serde(default)]
+    pub entry_index: i32,
+    pub time: Option<DateTime<Utc>>,
+}
+#[derive(Serialize)]
+pub struct StorageLogEntry {
+    pub member_name: String,
+    pub item_name: String,
+    pub quantity: i32,
+    pub action: String,
+    pub gp_value: Option<i64>,
+    pub message_link: Option<String>,
+    pub time: DateTime<Utc>,
+}
+pub type GroupStorageLog = Vec<StorageLogEntry>;
+
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct SetMemberDiscordId {

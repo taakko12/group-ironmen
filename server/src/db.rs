@@ -2,8 +2,9 @@ use crate::crypto::token_hash;
 use crate::error::ApiError;
 use crate::models::{
     AggregateSkillData, CreateGroup, DeathEntry, GroupDeathData, GroupLootData, GroupMember,
-    GroupSkillData, LootDropEntry, MemberDeathData, MemberLootData, MemberSkillData, NewDeath,
-    NewLootDrop, PendingBankPing, SHARED_MEMBER,
+    GroupSkillData, GroupStorageLog, LootDropEntry, MemberDeathData, MemberLootData,
+    MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, StorageLogAction,
+    StorageLogEntry, SHARED_MEMBER,
 };
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Transaction};
@@ -729,6 +730,247 @@ ORDER BY d.recorded_at ASC
     }
 
     Ok(member_data.into_values().collect())
+}
+
+/// Decodes a raw `[item_id, quantity, ...]` snapshot column into (id, qty)
+/// pairs, same encoding as `decode_item_ids` but keeping quantities.
+fn decode_item_stacks(raw: &[i32]) -> Vec<(i32, i32)> {
+    raw.chunks_exact(2).map(|c| (c[0], c[1])).collect()
+}
+
+fn encode_item_stacks(stacks: &[(i32, i32)]) -> Vec<i32> {
+    stacks.iter().flat_map(|&(id, qty)| [id, qty]).collect()
+}
+
+/// Removes up to `quantity` units of `item_id` from a snapshot, zeroing
+/// matched slots in place (id -> -1, qty -> 0) rather than shrinking the
+/// array, since inventory/equipment slots are positional. Returns the
+/// updated array and how much was actually removed (<= `quantity`, since
+/// the snapshot may hold less than we're asked to remove).
+fn remove_item_quantity(raw: &[i32], item_id: i32, quantity: i32) -> (Vec<i32>, i32) {
+    let mut remaining = quantity;
+    let mut stacks = decode_item_stacks(raw);
+    for (id, qty) in stacks.iter_mut() {
+        if *id == item_id && remaining > 0 {
+            let take = remaining.min(*qty);
+            *qty -= take;
+            remaining -= take;
+            if *qty <= 0 {
+                *id = -1;
+                *qty = 0;
+            }
+        }
+    }
+    (encode_item_stacks(&stacks), quantity - remaining)
+}
+
+/// Adds `quantity` units of `item_id` to a snapshot, merging into an
+/// existing stack of the same item, reusing an empty (-1, 0) slot, or
+/// appending a new one.
+fn add_item_quantity(raw: &[i32], item_id: i32, quantity: i32) -> Vec<i32> {
+    let mut stacks = decode_item_stacks(raw);
+    if let Some((_, qty)) = stacks.iter_mut().find(|(id, _)| *id == item_id) {
+        *qty += quantity;
+    } else if let Some(slot) = stacks.iter_mut().find(|(id, _)| *id <= 0) {
+        *slot = (item_id, quantity);
+    } else {
+        stacks.push((item_id, quantity));
+    }
+    encode_item_stacks(&stacks)
+}
+
+/// Corrects a member's cached inventory/bank snapshot the moment we observe
+/// (via a Dink group storage deposit) that an item actually left their
+/// possession -- rather than waiting for their next real snapshot, which
+/// may be long delayed or (if they're now on mobile, which sends no plugin
+/// data at all) never arrive before someone else's client shows the item
+/// duplicated in shared storage. This is a best-effort bridge: any real
+/// update from that member's own client fully replaces these columns
+/// wholesale, so an imperfect correction here just gets overwritten.
+/// Checks inventory first (the more common deposit source), then bank for
+/// whatever quantity remains unaccounted for.
+async fn remove_item_from_member_snapshot(
+    client: &Client,
+    member_id: i64,
+    item_id: i32,
+    quantity: i32,
+) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached("SELECT inventory, bank FROM groupironman.members WHERE member_id=$1")
+        .await?;
+    let row = match client.query_opt(&stmt, &[&member_id]).await? {
+        Some(row) => row,
+        None => return Ok(()),
+    };
+
+    let inventory: Option<Vec<i32>> = row.try_get("inventory").ok();
+    let bank: Option<Vec<i32>> = row.try_get("bank").ok();
+
+    let mut remaining = quantity;
+    let new_inventory = inventory.map(|inv| {
+        let (updated, taken) = remove_item_quantity(&inv, item_id, remaining);
+        remaining -= taken;
+        updated
+    });
+    let new_bank = if remaining > 0 {
+        bank.map(|b| remove_item_quantity(&b, item_id, remaining).0)
+    } else {
+        None
+    };
+
+    let update_stmt = client
+        .prepare_cached(
+            "UPDATE groupironman.members SET inventory=COALESCE($1, inventory), bank=COALESCE($2, bank) WHERE member_id=$3",
+        )
+        .await?;
+    client
+        .execute(&update_stmt, &[&new_inventory, &new_bank, &member_id])
+        .await
+        .map_err(ApiError::AddStorageLogError)?;
+
+    Ok(())
+}
+
+/// Adjusts `@SHARED`'s cached bank snapshot by `delta` (positive to add,
+/// negative to remove) the moment we observe a Dink group storage
+/// deposit/withdrawal, instead of waiting for some other member's client to
+/// happen to reopen shared storage and resync it.
+async fn adjust_shared_bank(
+    client: &Client,
+    group_id: i64,
+    item_id: i32,
+    delta: i32,
+) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached("SELECT bank FROM groupironman.members WHERE group_id=$1 AND member_name=$2")
+        .await?;
+    let row = match client.query_opt(&stmt, &[&group_id, &SHARED_MEMBER]).await? {
+        Some(row) => row,
+        None => return Ok(()),
+    };
+    let bank: Vec<i32> = row.try_get::<_, Option<Vec<i32>>>("bank")?.unwrap_or_default();
+
+    let updated = if delta >= 0 {
+        add_item_quantity(&bank, item_id, delta)
+    } else {
+        remove_item_quantity(&bank, item_id, -delta).0
+    };
+
+    let update_stmt = client
+        .prepare_cached("UPDATE groupironman.members SET bank=$1 WHERE group_id=$2 AND member_name=$3")
+        .await?;
+    client
+        .execute(&update_stmt, &[&updated, &group_id, &SHARED_MEMBER])
+        .await
+        .map_err(ApiError::AddStorageLogError)?;
+
+    Ok(())
+}
+
+pub async fn add_storage_log_entry(
+    client: &Client,
+    group_id: i64,
+    entry: &NewStorageLogEntry,
+) -> Result<(), ApiError> {
+    let resolved_name = resolve_member_name(client, group_id, &entry.member_name).await?;
+    let member_id = match try_get_member_id(client, group_id, &resolved_name).await? {
+        Some(member_id) => member_id,
+        None => {
+            return Err(ApiError::GroupMemberValidationError(format!(
+                "No member named '{}' in this group",
+                entry.member_name
+            )))
+        }
+    };
+
+    let recorded_at = entry.time.unwrap_or_else(Utc::now);
+    let action = match entry.action {
+        StorageLogAction::Deposit => "deposit",
+        StorageLogAction::Withdraw => "withdraw",
+    };
+
+    let stmt = client
+        .prepare_cached(
+            r#"
+INSERT INTO groupironman.storage_log (member_id, item_id, item_name, quantity, action, gp_value, message_link, discord_message_id, entry_index, recorded_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT (member_id, discord_message_id, entry_index) WHERE discord_message_id IS NOT NULL
+DO NOTHING
+RETURNING id
+"#,
+        )
+        .await?;
+    let inserted = client
+        .query_opt(
+            &stmt,
+            &[
+                &member_id,
+                &entry.item_id,
+                &entry.item_name,
+                &entry.quantity,
+                &action,
+                &entry.gp_value,
+                &entry.message_link,
+                &entry.discord_message_id,
+                &entry.entry_index,
+                &recorded_at,
+            ],
+        )
+        .await
+        .map_err(ApiError::AddStorageLogError)?;
+
+    // Only correct cached snapshots for a genuinely new event -- reprocessing
+    // a duplicate (e.g. from re-running /scrape) must not double-apply it.
+    if inserted.is_some() {
+        if let Some(item_id) = entry.item_id {
+            match entry.action {
+                StorageLogAction::Deposit => {
+                    remove_item_from_member_snapshot(client, member_id, item_id, entry.quantity)
+                        .await?;
+                    adjust_shared_bank(client, group_id, item_id, entry.quantity).await?;
+                }
+                StorageLogAction::Withdraw => {
+                    adjust_shared_bank(client, group_id, item_id, -entry.quantity).await?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn get_storage_log(client: &Client, group_id: i64) -> Result<GroupStorageLog, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+SELECT member_name, item_name, quantity, action, gp_value, message_link, recorded_at
+FROM groupironman.storage_log s
+INNER JOIN groupironman.members m ON m.member_id=s.member_id
+WHERE m.group_id=$1
+ORDER BY s.recorded_at DESC
+LIMIT 500
+"#,
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetStorageLogError)?;
+
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        result.push(StorageLogEntry {
+            member_name: row.try_get("member_name")?,
+            item_name: row.try_get("item_name")?,
+            quantity: row.try_get("quantity")?,
+            action: row.try_get("action")?,
+            gp_value: row.try_get("gp_value")?,
+            message_link: row.try_get("message_link")?,
+            time: row.try_get("recorded_at")?,
+        });
+    }
+
+    Ok(result)
 }
 
 pub async fn set_member_discord_id(
@@ -1572,6 +1814,50 @@ CREATE TABLE IF NOT EXISTS groupironman.skills_week (
             .await?;
 
         commit_migration(&transaction, "add_skill_week_period").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "create_storage_log_table").await? {
+        let transaction = client.transaction().await?;
+
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.storage_log (
+    id BIGSERIAL PRIMARY KEY,
+    member_id BIGINT NOT NULL REFERENCES groupironman.members(member_id),
+    item_id INTEGER,
+    item_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    gp_value BIGINT,
+    message_link TEXT,
+    discord_message_id TEXT,
+    entry_index INTEGER NOT NULL DEFAULT 0,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE UNIQUE INDEX IF NOT EXISTS storage_log_message_dedup ON groupironman.storage_log (member_id, discord_message_id, entry_index) WHERE discord_message_id IS NOT NULL;
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE INDEX IF NOT EXISTS storage_log_member_time_idx ON groupironman.storage_log (member_id, recorded_at);
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "create_storage_log_table").await?;
         transaction.commit().await?;
     }
 

@@ -6,12 +6,18 @@ const SITE_URL = process.env.SITE_URL || 'https://group-ironmen.vercel.app';
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day — item data rarely changes
 
 let itemNames = new Map();
+let itemIds = new Map();
+
+function normalizeItemName(name) {
+  return name.trim().toLowerCase();
+}
 
 async function load() {
   try {
     const response = await fetch(`${SITE_URL}/data/item_data.json`);
     const data = await response.json();
     itemNames = new Map(Object.entries(data).map(([id, item]) => [Number(id), item.name]));
+    itemIds = new Map([...itemNames.entries()].map(([id, name]) => [normalizeItemName(name), id]));
     console.log(`[itemData] Loaded ${itemNames.size} item names`);
   } catch (err) {
     console.error(`[itemData] Failed to load item data: ${err.message}`);
@@ -27,4 +33,11 @@ function getItemName(itemId) {
   return itemNames.get(itemId) ?? `item #${itemId}`;
 }
 
-module.exports = { start, getItemName };
+// Reverse lookup for parsing Dink text, which only ever gives item names.
+// Returns null (rather than throwing) for names we can't resolve, since
+// callers should still log the entry with just the name.
+function getItemId(name) {
+  return itemIds.get(normalizeItemName(name)) ?? null;
+}
+
+module.exports = { start, getItemName, getItemId };

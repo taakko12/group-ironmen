@@ -63,6 +63,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/get-death-data`;
   }
 
+  get storageLogUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/get-storage-log`;
+  }
+
   get captchaEnabledUrl() {
     return `${this.baseUrl}/captcha-enabled`;
   }
@@ -296,6 +300,15 @@ class Api {
     });
 
     return response;
+  }
+
+  async getStorageLog() {
+    const response = await fetch(this.storageLogUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
   }
 
   async getWomGains(period) {
