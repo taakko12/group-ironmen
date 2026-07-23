@@ -31,3 +31,22 @@ death-page {
   padding: 4px 0;
   border-bottom: 1px solid var(--light-border);
 }
+
+.death-page__recent-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary-text);
+  text-decoration: none;
+}
+
+.death-page__recent-link:hover {
+  text-decoration: underline;
+}
+
+.death-page__screenshot {
+  height: 32px;
+  max-width: 56px;
+  object-fit: cover;
+  border-radius: 2px;
+}

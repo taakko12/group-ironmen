@@ -20,10 +20,32 @@ export class LootPage extends BaseElement {
     this.chartContainer = this.querySelector(".loot-page__chart-container");
     this.refreshButton = this.querySelector(".loot-page__refresh");
     this.periodSelect = this.querySelector(".loot-page__period-select");
+    this.playerFilter = this.querySelector(".loot-page__player-filter");
     this.eventListener(this.refreshButton, "click", this.handleRefreshClicked.bind(this));
     this.eventListener(this.periodSelect, "change", this.handlePeriodChange.bind(this));
+    this.eventListener(this.playerFilter, "change", this.handlePlayerFilterChange.bind(this));
+    this.subscribe("members-updated", this.handleUpdatedMembers.bind(this));
 
     this.subscribeOnce("get-group-data", this.load.bind(this));
+  }
+
+  handleUpdatedMembers(members) {
+    const selected = this.playerFilter.value;
+
+    let playerOptions = `<option value="@ALL">All Players</option>`;
+    for (const member of members) {
+      playerOptions += `<option value="${member.name}" ${member.name === selected ? "selected" : ""}>${
+        member.name
+      }</option>`;
+    }
+
+    this.playerFilter.innerHTML = playerOptions;
+  }
+
+  handlePlayerFilterChange() {
+    if (this.lootData) {
+      this.renderAll();
+    }
   }
 
   disconnectedCallback() {
@@ -65,10 +87,13 @@ export class LootPage extends BaseElement {
 
   renderAll() {
     const cutoff = LootPage.cutoffForPeriod(this.period);
-    const filteredLoot = this.lootData.map((member) => ({
-      name: member.name,
-      drops: member.drops.filter((drop) => new Date(drop.time) >= cutoff),
-    }));
+    const selectedPlayer = this.playerFilter.value;
+    const filteredLoot = this.lootData
+      .filter((member) => selectedPlayer === "@ALL" || !selectedPlayer || member.name === selectedPlayer)
+      .map((member) => ({
+        name: member.name,
+        drops: member.drops.filter((drop) => new Date(drop.time) >= cutoff),
+      }));
 
     this.renderLeaderboard(filteredLoot);
     this.renderChart(filteredLoot);
@@ -92,17 +117,21 @@ export class LootPage extends BaseElement {
 
   renderLeaderboard(lootData) {
     const rows = lootData
-      .map((member) => ({
-        name: member.name,
-        total: member.drops.reduce((sum, drop) => sum + drop.gp_value, 0),
-        count: member.drops.length,
-      }))
+      .map((member) => {
+        const sorted = [...member.drops].sort((a, b) => new Date(b.time) - new Date(a.time));
+        return {
+          name: member.name,
+          total: member.drops.reduce((sum, drop) => sum + drop.gp_value, 0),
+          count: member.drops.length,
+          mostRecent: sorted[0],
+        };
+      })
       .filter((row) => row.count > 0)
       .sort((a, b) => b.total - a.total);
 
     this.leaderboardContainer.innerHTML = `
 <table>
-  <thead><tr><th>Name</th><th>Total Loot</th><th>Drops</th></tr></thead>
+  <thead><tr><th>Name</th><th>Total Loot</th><th>Drops</th><th>Most Recent</th></tr></thead>
   <tbody>
     ${rows
       .map(
@@ -111,11 +140,25 @@ export class LootPage extends BaseElement {
       <td>${row.name}</td>
       <td>${row.total.toLocaleString()} gp</td>
       <td>${row.count}</td>
+      <td>${LootPage.mostRecentDropHtml(row.mostRecent)}</td>
     </tr>`
       )
       .join("")}
   </tbody>
 </table>`;
+  }
+
+  static mostRecentDropHtml(drop) {
+    if (!drop) return "";
+    const imageUrl = drop.screenshot_url || drop.image_url;
+    const img = imageUrl
+      ? `<img class="loot-page__screenshot" src="${imageUrl}" loading="lazy" onerror="this.style.display='none'" />`
+      : "";
+    const label = `${drop.item_name} (${drop.gp_value.toLocaleString()} gp)`;
+    const content = `${img}<span>${label}</span>`;
+    return drop.message_link
+      ? `<a class="loot-page__recent-link" href="${drop.message_link}" target="_blank" rel="noopener">${content}</a>`
+      : `<span class="loot-page__recent-link">${content}</span>`;
   }
 
   renderChart(lootData) {

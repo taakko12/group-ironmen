@@ -79,13 +79,16 @@ export class DeathPage extends BaseElement {
 
   renderLeaderboard(deathData) {
     const rows = deathData
-      .map((member) => ({ name: member.name, count: member.deaths.length }))
+      .map((member) => {
+        const sorted = [...member.deaths].sort((a, b) => new Date(b.time) - new Date(a.time));
+        return { name: member.name, count: member.deaths.length, mostRecent: sorted[0] };
+      })
       .filter((row) => row.count > 0)
       .sort((a, b) => b.count - a.count);
 
     this.leaderboardContainer.innerHTML = `
 <table>
-  <thead><tr><th>Name</th><th>Deaths</th></tr></thead>
+  <thead><tr><th>Name</th><th>Deaths</th><th>Most Recent</th></tr></thead>
   <tbody>
     ${rows
       .map(
@@ -93,11 +96,24 @@ export class DeathPage extends BaseElement {
     <tr>
       <td>${row.name}</td>
       <td>${row.count}</td>
+      <td>${DeathPage.mostRecentDeathHtml(row.mostRecent)}</td>
     </tr>`
       )
       .join("")}
   </tbody>
 </table>`;
+  }
+
+  static mostRecentDeathHtml(death) {
+    if (!death) return "";
+    const img = death.image_url
+      ? `<img class="death-page__screenshot" src="${death.image_url}" loading="lazy" onerror="this.style.display='none'" />`
+      : "";
+    const label = new Date(death.time).toLocaleString();
+    const content = `${img}<span>${label}</span>`;
+    return death.message_link
+      ? `<a class="death-page__recent-link" href="${death.message_link}" target="_blank" rel="noopener">${content}</a>`
+      : `<span class="death-page__recent-link">${content}</span>`;
   }
 }
 
