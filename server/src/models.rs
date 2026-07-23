@@ -92,6 +92,10 @@ pub struct NewLootDrop {
     pub discord_message_id: Option<String>,
     #[serde(default)]
     pub embed_index: i32,
+    /// The Discord message's real timestamp, so backfilled history (via
+    /// /scrape) doesn't get stamped with the scrape's run time instead of
+    /// when the drop actually happened. Falls back to now() if omitted.
+    pub time: Option<DateTime<Utc>>,
 }
 #[derive(Serialize)]
 pub struct LootDropEntry {
@@ -113,6 +117,7 @@ pub struct NewDeath {
     pub member_name: String,
     pub image_url: Option<String>,
     pub discord_message_id: Option<String>,
+    pub time: Option<DateTime<Utc>>,
 }
 #[derive(Serialize)]
 pub struct DeathEntry {

@@ -550,12 +550,15 @@ pub async fn add_loot_drop(
         }
     };
 
+    let recorded_at = loot_drop.time.unwrap_or_else(Utc::now);
+
     let stmt = client
         .prepare_cached(
             r#"
-INSERT INTO groupironman.loot_drops (member_id, item_name, gp_value, image_url, discord_message_id, embed_index)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (member_id, discord_message_id, embed_index) WHERE discord_message_id IS NOT NULL DO NOTHING
+INSERT INTO groupironman.loot_drops (member_id, item_name, gp_value, image_url, discord_message_id, embed_index, recorded_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (member_id, discord_message_id, embed_index) WHERE discord_message_id IS NOT NULL
+DO UPDATE SET recorded_at = excluded.recorded_at
 "#,
         )
         .await?;
@@ -569,6 +572,7 @@ ON CONFLICT (member_id, discord_message_id, embed_index) WHERE discord_message_i
                 &loot_drop.image_url,
                 &loot_drop.discord_message_id,
                 &loot_drop.embed_index,
+                &recorded_at,
             ],
         )
         .await
@@ -632,19 +636,22 @@ pub async fn add_death(client: &Client, group_id: i64, death: &NewDeath) -> Resu
         }
     };
 
+    let recorded_at = death.time.unwrap_or_else(Utc::now);
+
     let stmt = client
         .prepare_cached(
             r#"
-INSERT INTO groupironman.deaths (member_id, image_url, discord_message_id)
-VALUES ($1, $2, $3)
-ON CONFLICT (member_id, discord_message_id) WHERE discord_message_id IS NOT NULL DO NOTHING
+INSERT INTO groupironman.deaths (member_id, image_url, discord_message_id, recorded_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (member_id, discord_message_id) WHERE discord_message_id IS NOT NULL
+DO UPDATE SET recorded_at = excluded.recorded_at
 "#,
         )
         .await?;
     client
         .execute(
             &stmt,
-            &[&member_id, &death.image_url, &death.discord_message_id],
+            &[&member_id, &death.image_url, &death.discord_message_id, &recorded_at],
         )
         .await
         .map_err(ApiError::AddDeathError)?;

@@ -21,6 +21,7 @@ async function processDeathMessage(message) {
       member_name: memberName,
       image_url: parseDeathImage(message),
       discord_message_id: message.id,
+      time: message.createdAt.toISOString(),
     });
     console.log(`[death] Recorded death for "${memberName}"`);
     return 1;
@@ -48,6 +49,7 @@ async function processLootMessage(message) {
           image_url: imageUrl,
           discord_message_id: message.id,
           embed_index: embedIndex,
+          time: message.createdAt.toISOString(),
         });
         console.log(`[loot] Recorded ${gpValue.toLocaleString()} gp (${item}) for "${memberName}"`);
         recorded++;
