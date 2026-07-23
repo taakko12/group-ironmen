@@ -3,8 +3,8 @@ use crate::error::ApiError;
 use crate::models::{
     AggregateSkillData, CreateGroup, DeathEntry, GroupDeathData, GroupLootData, GroupMember,
     GroupSkillData, GroupStorageLog, LootDropEntry, MemberDeathData, MemberLootData,
-    MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, StorageLogAction,
-    StorageLogEntry, SHARED_MEMBER,
+    MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPing,
+    RecentBankPings, StorageLogAction, StorageLogEntry, SHARED_MEMBER,
 };
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Transaction};
@@ -1212,6 +1212,45 @@ RETURNING m.member_name, m.discord_id, p.item_id, p.reason
             discord_id: row.try_get("discord_id").ok(),
             item_id: row.try_get("item_id")?,
             reason: row.try_get("reason")?,
+        });
+    }
+
+    Ok(result)
+}
+
+/// Non-destructive read of recent bank pings for the site's toast
+/// notifications. Deliberately separate from `poll_bank_pings`, which
+/// drains the queue for the Discord bot's delivery loop -- calling that
+/// from the frontend too would race the bot and steal pings meant for
+/// Discord, so this just reads recent rows without touching `delivered_at`.
+pub async fn get_recent_bank_pings(
+    client: &Client,
+    group_id: i64,
+) -> Result<RecentBankPings, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+SELECT member_name, item_id, reason, created_at
+FROM groupironman.bank_pings p
+INNER JOIN groupironman.members m ON m.member_id=p.member_id
+WHERE m.group_id=$1
+ORDER BY p.created_at DESC
+LIMIT 20
+"#,
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetRecentBankPingsError)?;
+
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        result.push(RecentBankPing {
+            member_name: row.try_get("member_name")?,
+            item_id: row.try_get("item_id")?,
+            reason: row.try_get("reason")?,
+            created_at: row.try_get("created_at")?,
         });
     }
 

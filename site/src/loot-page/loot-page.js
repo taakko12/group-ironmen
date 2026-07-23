@@ -99,10 +99,16 @@ export class LootPage extends BaseElement {
     this.renderChart(filteredLoot);
   }
 
+  static periodLabel(period) {
+    return period === "AllTime" ? "All Time" : period;
+  }
+
   static cutoffForPeriod(period) {
     const now = Date.now();
     const day = 24 * 3600 * 1000;
     switch (period) {
+      case "AllTime":
+        return new Date(0);
       case "Week":
         return new Date(now - 7 * day);
       case "Month":
@@ -218,7 +224,7 @@ export class LootPage extends BaseElement {
         maintainAspectRatio: false,
         animation: false,
         plugins: {
-          title: { display: true, text: `Total Loot Over Time - ${this.period}` },
+          title: { display: true, text: `Total Loot Over Time - ${LootPage.periodLabel(this.period)}` },
           tooltip: {
             callbacks: {
               label: (tooltip) => `${tooltip.dataset.label}: ${tooltip.parsed.y.toLocaleString()} gp`,

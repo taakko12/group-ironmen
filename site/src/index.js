@@ -44,6 +44,7 @@ import "./loot-page/loot-page.js";
 import "./death-page/death-page.js";
 import "./dashboard-page/dashboard-page.js";
 import "./storage-log-page/storage-log-page.js";
+import "./toast-notifications/toast-notifications.js";
 import "./confirm-dialog/confirm-dialog.js";
 import "./panels-page/panels-page.js";
 import "./diary-dialog/diary-dialog.js";

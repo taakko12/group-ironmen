@@ -65,6 +65,8 @@ export class DeathPage extends BaseElement {
     const now = Date.now();
     const day = 24 * 3600 * 1000;
     switch (period) {
+      case "AllTime":
+        return new Date(0);
       case "Week":
         return new Date(now - 7 * day);
       case "Month":

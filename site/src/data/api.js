@@ -39,6 +39,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/request-bank`;
   }
 
+  get recentBankPingsUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/recent-bank-pings`;
+  }
+
   get womGainsUrl() {
     return `${this.baseUrl}/group/${this.groupName}/wom-gains`;
   }
@@ -300,6 +304,15 @@ class Api {
     });
 
     return response;
+  }
+
+  async getRecentBankPings() {
+    const response = await fetch(this.recentBankPingsUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
   }
 
   async getStorageLog() {

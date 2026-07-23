@@ -4,8 +4,8 @@ use crate::error::ApiError;
 use crate::models::{
     AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
     GroupStorageLog, MustBankItem, NameChange, NewDeath, NewLootDrop, NewStorageLogEntry,
-    PendingBankPing, RenameGroupMember, RequestBank, SetMemberDiscordId, WomPlayerGains,
-    SHARED_MEMBER,
+    PendingBankPing, RecentBankPings, RenameGroupMember, RequestBank, SetMemberDiscordId,
+    WomPlayerGains, SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
 use crate::wom;
@@ -344,6 +344,16 @@ pub async fn poll_bank_pings(
 ) -> Result<web::Json<Vec<PendingBankPing>>, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let pings = db::poll_bank_pings(&client, auth.group_id).await?;
+    Ok(web::Json(pings))
+}
+
+#[get("/recent-bank-pings")]
+pub async fn get_recent_bank_pings(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<RecentBankPings>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let pings = db::get_recent_bank_pings(&client, auth.group_id).await?;
     Ok(web::Json(pings))
 }
 

@@ -212,6 +212,20 @@ pub struct PendingBankPing {
     pub reason: String,
 }
 
+/// Non-destructive read of recent bank pings, for the frontend's toast
+/// notifications. Deliberately separate from `PendingBankPing`/
+/// `poll_bank_pings`, which drains the queue and is exclusively for the
+/// Discord bot's delivery loop -- the site must never call that endpoint,
+/// or it would race the bot and steal pings meant for Discord.
+#[derive(Serialize)]
+pub struct RecentBankPing {
+    pub member_name: String,
+    pub item_id: i32,
+    pub reason: String,
+    pub created_at: DateTime<Utc>,
+}
+pub type RecentBankPings = Vec<RecentBankPing>;
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateGroup {
