@@ -91,15 +91,15 @@ export class DashboardPage extends BaseElement {
   </div>
   <div class="dashboard-page__tab-panel dashboard-page__tab-panel--hidden" data-panel="stats">
     <div class="dashboard-page__stats-total">${DashboardPage.totalXpHtml(gains)}</div>
-    <div class="dashboard-page__stats-columns">
-      <div class="dashboard-page__stats-column">
-        <h4>Skills</h4>
-        ${DashboardPage.skillsGainedHtml(gains)}
-      </div>
-      <div class="dashboard-page__stats-column">
-        <h4>Bosses</h4>
-        ${DashboardPage.bossesGainedHtml(gains)}
-      </div>
+    <div class="dashboard-page__stats-subtabs">
+      <button type="button" class="dashboard-page__stats-subtab dashboard-page__stats-subtab--active" data-subtab="skills">Skills</button>
+      <button type="button" class="dashboard-page__stats-subtab" data-subtab="bosses">Bosses</button>
+    </div>
+    <div class="dashboard-page__stats-subpanel" data-subpanel="skills">
+      ${DashboardPage.skillsGainedHtml(gains)}
+    </div>
+    <div class="dashboard-page__stats-subpanel dashboard-page__stats-subpanel--hidden" data-subpanel="bosses">
+      ${DashboardPage.bossesGainedHtml(gains)}
     </div>
   </div>
 </div>`;
@@ -108,6 +108,9 @@ export class DashboardPage extends BaseElement {
 
     for (const tab of this.cardsContainer.querySelectorAll(".dashboard-page__tab")) {
       this.eventListener(tab, "click", this.handleTabClick.bind(this));
+    }
+    for (const subtab of this.cardsContainer.querySelectorAll(".dashboard-page__stats-subtab")) {
+      this.eventListener(subtab, "click", this.handleStatsSubtabClick.bind(this));
     }
   }
 
@@ -121,6 +124,19 @@ export class DashboardPage extends BaseElement {
     }
     for (const panel of card.querySelectorAll(".dashboard-page__tab-panel")) {
       panel.classList.toggle("dashboard-page__tab-panel--hidden", panel.dataset.panel !== tab);
+    }
+  }
+
+  handleStatsSubtabClick(event) {
+    const button = event.currentTarget;
+    const card = button.closest(".dashboard-page__card");
+    const subtab = button.dataset.subtab;
+
+    for (const b of card.querySelectorAll(".dashboard-page__stats-subtab")) {
+      b.classList.toggle("dashboard-page__stats-subtab--active", b === button);
+    }
+    for (const panel of card.querySelectorAll(".dashboard-page__stats-subpanel")) {
+      panel.classList.toggle("dashboard-page__stats-subpanel--hidden", panel.dataset.subpanel !== subtab);
     }
   }
 
