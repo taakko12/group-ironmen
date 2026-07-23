@@ -13,12 +13,22 @@ export class DashboardPage extends BaseElement {
   connectedCallback() {
     super.connectedCallback();
     this.render();
+    this.period = "Week";
 
     this.cardsContainer = this.querySelector(".dashboard-page__cards");
     this.refreshButton = this.querySelector(".dashboard-page__refresh");
+    this.periodSelect = this.querySelector(".dashboard-page__period-select");
     this.eventListener(this.refreshButton, "click", this.handleRefreshClicked.bind(this));
+    this.eventListener(this.periodSelect, "change", this.handlePeriodChange.bind(this));
 
     this.subscribeOnce("get-group-data", this.load.bind(this));
+  }
+
+  handlePeriodChange() {
+    this.period = this.periodSelect.value;
+    if (this.currentGroupData) {
+      this.loadWomAndRender();
+    }
   }
 
   handleRefreshClicked() {
@@ -28,12 +38,15 @@ export class DashboardPage extends BaseElement {
   async load(groupData) {
     if (!this.isConnected) return;
     this.currentGroupData = groupData;
+    await this.loadWomAndRender();
+  }
 
+  async loadWomAndRender() {
     this.cardsContainer.innerHTML = '<div class="loader"></div>';
 
     try {
       const [womGains, lootData, deathData] = await Promise.all([
-        api.getWomGains(),
+        api.getWomGains(this.period),
         api.getLootData(),
         api.getDeathData(),
       ]);
@@ -61,11 +74,14 @@ export class DashboardPage extends BaseElement {
 <div class="dashboard-page__card rsborder rsbackground">
   <h3>${member.name}</h3>
   <div class="dashboard-page__wom">
-    ${
-      gains
-        ? `<span>XP gained (7d): ${gains.xp_gained.toLocaleString()}</span><span>Kills gained (7d): ${gains.kills_gained.toLocaleString()}</span>`
-        : `<span class="dashboard-page__no-data">No WOM data yet</span>`
-    }
+    <div class="dashboard-page__wom-stat">
+      <span class="dashboard-page__wom-label">Top Skill</span>
+      <span class="dashboard-page__wom-value">${DashboardPage.topSkillHtml(gains)}</span>
+    </div>
+    <div class="dashboard-page__wom-stat">
+      <span class="dashboard-page__wom-label">Top Boss</span>
+      <span class="dashboard-page__wom-value">${DashboardPage.topBossHtml(gains)}</span>
+    </div>
   </div>
   <div class="dashboard-page__activity">
     <div class="dashboard-page__activity-item">
@@ -82,29 +98,39 @@ export class DashboardPage extends BaseElement {
       .join("");
   }
 
+  static topSkillHtml(gains) {
+    if (!gains || !gains.top_skill_name) return '<span class="dashboard-page__no-data">No data</span>';
+    return `${gains.top_skill_name} (+${gains.top_skill_xp.toLocaleString()} xp)`;
+  }
+
+  static topBossHtml(gains) {
+    if (!gains || !gains.top_boss_name) return '<span class="dashboard-page__no-data">No data</span>';
+    return `${gains.top_boss_name} (${gains.top_boss_kills.toLocaleString()} kc)`;
+  }
+
   static recentDropHtml(drop) {
-    if (!drop) return '<span class="dashboard-page__no-data">None recorded</span>';
+    if (!drop) return '<div class="dashboard-page__no-data">None recorded</div>';
     const imageUrl = drop.screenshot_url || drop.image_url;
     const img = imageUrl
       ? `<img class="dashboard-page__screenshot" src="${imageUrl}" loading="lazy" onerror="this.style.display='none'" />`
       : "";
     const label = `${drop.item_name} (${drop.gp_value.toLocaleString()} gp)`;
-    const content = `${img}<span>${label}</span>`;
+    const content = `${img}<span class="dashboard-page__activity-label">${label}</span>`;
     return drop.message_link
-      ? `<a href="${drop.message_link}" target="_blank" rel="noopener">${content}</a>`
-      : content;
+      ? `<a class="dashboard-page__activity-link" href="${drop.message_link}" target="_blank" rel="noopener">${content}</a>`
+      : `<div class="dashboard-page__activity-link">${content}</div>`;
   }
 
   static recentDeathHtml(death) {
-    if (!death) return '<span class="dashboard-page__no-data">None recorded</span>';
+    if (!death) return '<div class="dashboard-page__no-data">None recorded</div>';
     const img = death.image_url
       ? `<img class="dashboard-page__screenshot" src="${death.image_url}" loading="lazy" onerror="this.style.display='none'" />`
       : "";
     const label = new Date(death.time).toLocaleString();
-    const content = `${img}<span>${label}</span>`;
+    const content = `${img}<span class="dashboard-page__activity-label">${label}</span>`;
     return death.message_link
-      ? `<a href="${death.message_link}" target="_blank" rel="noopener">${content}</a>`
-      : content;
+      ? `<a class="dashboard-page__activity-link" href="${death.message_link}" target="_blank" rel="noopener">${content}</a>`
+      : `<div class="dashboard-page__activity-link">${content}</div>`;
   }
 }
 customElements.define("dashboard-page", DashboardPage);

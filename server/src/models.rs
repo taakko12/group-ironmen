@@ -215,5 +215,8 @@ pub struct CaptchaVerifyResponse {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct WomPlayerGains {
     pub xp_gained: i64,
-    pub kills_gained: i64,
+    pub top_skill_name: Option<String>,
+    pub top_skill_xp: Option<i64>,
+    pub top_boss_name: Option<String>,
+    pub top_boss_kills: Option<i64>,
 }

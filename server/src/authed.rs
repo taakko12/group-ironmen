@@ -171,15 +171,27 @@ pub async fn get_skill_data(
     Ok(web::Json(group_skill_data))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetWomGainsQuery {
+    pub period: SkillDataPeriod,
+}
 #[get("/wom-gains")]
 pub async fn get_wom_gains(
     auth: Authenticated,
     db_pool: web::Data<Pool>,
+    query: web::Query<GetWomGainsQuery>,
 ) -> Result<web::Json<HashMap<String, WomPlayerGains>>, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let member_names = db::get_group_member_names(&client, auth.group_id).await?;
 
-    let cache = wom::get_cached_wom_gains();
+    let period = match query.period {
+        SkillDataPeriod::Day => "day",
+        SkillDataPeriod::Week => "week",
+        SkillDataPeriod::Month => "month",
+        SkillDataPeriod::Year => "year",
+    };
+    let cache = wom::get_cached_wom_gains(period);
     let mut result = HashMap::new();
     for member_name in member_names {
         if let Some(gains) = cache.get(&member_name) {

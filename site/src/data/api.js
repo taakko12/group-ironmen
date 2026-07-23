@@ -298,8 +298,8 @@ class Api {
     return response;
   }
 
-  async getWomGains() {
-    const response = await fetch(this.womGainsUrl, {
+  async getWomGains(period) {
+    const response = await fetch(`${this.womGainsUrl}?period=${period}`, {
       headers: {
         Authorization: this.groupToken,
       },
