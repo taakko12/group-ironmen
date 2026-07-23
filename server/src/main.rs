@@ -79,6 +79,10 @@ async fn main() -> std::io::Result<()> {
             .service(authed::am_i_logged_in)
             .service(authed::am_i_in_group)
             .service(authed::get_skill_data)
+            .service(authed::add_loot_drop)
+            .service(authed::get_loot_data)
+            .service(authed::add_death)
+            .service(authed::get_death_data)
             .service(authed::get_collection_log);
         let json_config = web::JsonConfig::default().limit(100000);
         let cors = Cors::default()

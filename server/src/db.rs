@@ -1,7 +1,9 @@
 use crate::crypto::token_hash;
 use crate::error::ApiError;
 use crate::models::{
-    AggregateSkillData, CreateGroup, GroupMember, GroupSkillData, MemberSkillData, SHARED_MEMBER,
+    AggregateSkillData, CreateGroup, DeathEntry, GroupDeathData, GroupLootData, GroupMember,
+    GroupSkillData, LootDropEntry, MemberDeathData, MemberLootData, MemberSkillData, NewDeath,
+    NewLootDrop, SHARED_MEMBER,
 };
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Transaction};
@@ -460,6 +462,147 @@ WHERE m.group_id=$1
     Ok(member_data.into_values().collect())
 }
 
+pub async fn add_loot_drop(
+    client: &Client,
+    group_id: i64,
+    loot_drop: &NewLootDrop,
+) -> Result<(), ApiError> {
+    let member_id = get_member_id(client, group_id, &loot_drop.member_name).await?;
+
+    let stmt = client
+        .prepare_cached(
+            r#"
+INSERT INTO groupironman.loot_drops (member_id, item_name, gp_value, image_url, discord_message_id, embed_index)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (member_id, discord_message_id, embed_index) WHERE discord_message_id IS NOT NULL DO NOTHING
+"#,
+        )
+        .await?;
+    client
+        .execute(
+            &stmt,
+            &[
+                &member_id,
+                &loot_drop.item_name,
+                &loot_drop.gp_value,
+                &loot_drop.image_url,
+                &loot_drop.discord_message_id,
+                &loot_drop.embed_index,
+            ],
+        )
+        .await
+        .map_err(ApiError::AddLootDropError)?;
+
+    Ok(())
+}
+
+pub async fn get_loot_data(client: &Client, group_id: i64) -> Result<GroupLootData, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+SELECT member_name, item_name, gp_value, image_url, recorded_at
+FROM groupironman.loot_drops d
+INNER JOIN groupironman.members m ON m.member_id=d.member_id
+WHERE m.group_id=$1
+ORDER BY d.recorded_at ASC
+"#,
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetLootDataError)?;
+
+    let mut member_data = HashMap::new();
+    for row in rows {
+        let member_name: String = row.try_get("member_name")?;
+        let entry = LootDropEntry {
+            item_name: row.try_get("item_name")?,
+            gp_value: row.try_get("gp_value")?,
+            image_url: row.try_get("image_url")?,
+            time: row.try_get("recorded_at")?,
+        };
+
+        if !member_data.contains_key(&member_name) {
+            member_data.insert(
+                member_name.clone(),
+                MemberLootData {
+                    name: member_name,
+                    drops: vec![entry],
+                },
+            );
+        } else if let Some(member_loot_data) = member_data.get_mut(&member_name) {
+            member_loot_data.drops.push(entry);
+        }
+    }
+
+    Ok(member_data.into_values().collect())
+}
+
+pub async fn add_death(client: &Client, group_id: i64, death: &NewDeath) -> Result<(), ApiError> {
+    let member_id = get_member_id(client, group_id, &death.member_name).await?;
+
+    let stmt = client
+        .prepare_cached(
+            r#"
+INSERT INTO groupironman.deaths (member_id, image_url, discord_message_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (member_id, discord_message_id) WHERE discord_message_id IS NOT NULL DO NOTHING
+"#,
+        )
+        .await?;
+    client
+        .execute(
+            &stmt,
+            &[&member_id, &death.image_url, &death.discord_message_id],
+        )
+        .await
+        .map_err(ApiError::AddDeathError)?;
+
+    Ok(())
+}
+
+pub async fn get_death_data(client: &Client, group_id: i64) -> Result<GroupDeathData, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+SELECT member_name, image_url, recorded_at
+FROM groupironman.deaths d
+INNER JOIN groupironman.members m ON m.member_id=d.member_id
+WHERE m.group_id=$1
+ORDER BY d.recorded_at ASC
+"#,
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetDeathDataError)?;
+
+    let mut member_data = HashMap::new();
+    for row in rows {
+        let member_name: String = row.try_get("member_name")?;
+        let entry = DeathEntry {
+            image_url: row.try_get("image_url")?,
+            time: row.try_get("recorded_at")?,
+        };
+
+        if !member_data.contains_key(&member_name) {
+            member_data.insert(
+                member_name.clone(),
+                MemberDeathData {
+                    name: member_name,
+                    deaths: vec![entry],
+                },
+            );
+        } else if let Some(member_death_data) = member_data.get_mut(&member_name) {
+            member_death_data.deaths.push(entry);
+        }
+    }
+
+    Ok(member_data.into_values().collect())
+}
+
 pub async fn has_migration_run(client: &mut Client, name: &str) -> Result<bool, ApiError> {
     let count: i64 = client
         .query_one(
@@ -864,6 +1007,78 @@ END;$$;
         }
 
         commit_migration(&transaction, "update_timestamp_triggers").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "create_loot_and_death_tables").await? {
+        let transaction = client.transaction().await?;
+
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.loot_drops (
+    id BIGSERIAL PRIMARY KEY,
+    member_id BIGINT NOT NULL REFERENCES groupironman.members(member_id),
+    item_name TEXT NOT NULL,
+    gp_value BIGINT NOT NULL,
+    image_url TEXT,
+    discord_message_id TEXT,
+    embed_index INTEGER NOT NULL DEFAULT 0,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE UNIQUE INDEX IF NOT EXISTS loot_drops_message_dedup ON groupironman.loot_drops (member_id, discord_message_id, embed_index) WHERE discord_message_id IS NOT NULL;
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE INDEX IF NOT EXISTS loot_drops_member_time_idx ON groupironman.loot_drops (member_id, recorded_at);
+"#,
+                &[],
+            )
+            .await?;
+
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.deaths (
+    id BIGSERIAL PRIMARY KEY,
+    member_id BIGINT NOT NULL REFERENCES groupironman.members(member_id),
+    image_url TEXT,
+    discord_message_id TEXT,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE UNIQUE INDEX IF NOT EXISTS deaths_message_dedup ON groupironman.deaths (member_id, discord_message_id) WHERE discord_message_id IS NOT NULL;
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE INDEX IF NOT EXISTS deaths_member_time_idx ON groupironman.deaths (member_id, recorded_at);
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "create_loot_and_death_tables").await?;
         transaction.commit().await?;
     }
 

@@ -79,6 +79,50 @@ pub struct MemberSkillData {
     pub skill_data: Vec<AggregateSkillData>,
 }
 pub type GroupSkillData = Vec<MemberSkillData>;
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct NewLootDrop {
+    pub member_name: String,
+    pub item_name: String,
+    pub gp_value: i64,
+    pub image_url: Option<String>,
+    pub discord_message_id: Option<String>,
+    #[serde(default)]
+    pub embed_index: i32,
+}
+#[derive(Serialize)]
+pub struct LootDropEntry {
+    pub item_name: String,
+    pub gp_value: i64,
+    pub image_url: Option<String>,
+    pub time: DateTime<Utc>,
+}
+#[derive(Serialize)]
+pub struct MemberLootData {
+    pub name: String,
+    pub drops: Vec<LootDropEntry>,
+}
+pub type GroupLootData = Vec<MemberLootData>;
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct NewDeath {
+    pub member_name: String,
+    pub image_url: Option<String>,
+    pub discord_message_id: Option<String>,
+}
+#[derive(Serialize)]
+pub struct DeathEntry {
+    pub image_url: Option<String>,
+    pub time: DateTime<Utc>,
+}
+#[derive(Serialize)]
+pub struct MemberDeathData {
+    pub name: String,
+    pub deaths: Vec<DeathEntry>,
+}
+pub type GroupDeathData = Vec<MemberDeathData>;
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateGroup {

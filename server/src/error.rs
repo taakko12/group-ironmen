@@ -26,6 +26,14 @@ pub enum ApiError {
     IsMemberInGroupError(tokio_postgres::error::Error),
     #[from(ignore)]
     GetSkillsDataError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    AddLootDropError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    GetLootDataError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    AddDeathError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    GetDeathDataError(tokio_postgres::error::Error),
     GroupFullError,
     UreqError(ureq::Error),
     GroupMemberValidationError(String),
@@ -56,6 +64,10 @@ impl ResponseError for ApiError {
             ApiError::GetGroupDataError(ref err) => handle_pg_error(err, "GetGroupDataError"),
             ApiError::IsMemberInGroupError(ref err) => handle_pg_error(err, "IsMemberInGroupError"),
             ApiError::GetSkillsDataError(ref err) => handle_pg_error(err, "GetSkillsDataError"),
+            ApiError::AddLootDropError(ref err) => handle_pg_error(err, "AddLootDropError"),
+            ApiError::GetLootDataError(ref err) => handle_pg_error(err, "GetLootDataError"),
+            ApiError::AddDeathError(ref err) => handle_pg_error(err, "AddDeathError"),
+            ApiError::GetDeathDataError(ref err) => handle_pg_error(err, "GetDeathDataError"),
             ApiError::DeleteGroupMemberError(ref err) => {
                 handle_pg_error(err, "DeleteGroupMemberError")
             }

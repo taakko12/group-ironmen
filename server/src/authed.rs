@@ -2,7 +2,8 @@ use crate::auth_middleware::Authenticated;
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{
-    AmIInGroupRequest, GroupMember, GroupSkillData, RenameGroupMember, SHARED_MEMBER,
+    AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData, NewDeath,
+    NewLootDrop, RenameGroupMember, SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
 use actix_web::{delete, get, post, put, web, Error, HttpResponse};
@@ -166,6 +167,48 @@ pub async fn get_skill_data(
     let group_skill_data =
         db::get_skills_for_period(&client, auth.group_id, aggregate_period).await?;
     Ok(web::Json(group_skill_data))
+}
+
+#[post("/loot-drop")]
+pub async fn add_loot_drop(
+    auth: Authenticated,
+    loot_drop: web::Json<NewLootDrop>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::add_loot_drop(&client, auth.group_id, &loot_drop.into_inner()).await?;
+    Ok(HttpResponse::Created().finish())
+}
+
+#[get("/get-loot-data")]
+pub async fn get_loot_data(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<GroupLootData>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let loot_data = db::get_loot_data(&client, auth.group_id).await?;
+    Ok(web::Json(loot_data))
+}
+
+#[post("/death")]
+pub async fn add_death(
+    auth: Authenticated,
+    death: web::Json<NewDeath>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::add_death(&client, auth.group_id, &death.into_inner()).await?;
+    Ok(HttpResponse::Created().finish())
+}
+
+#[get("/get-death-data")]
+pub async fn get_death_data(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<GroupDeathData>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let death_data = db::get_death_data(&client, auth.group_id).await?;
+    Ok(web::Json(death_data))
 }
 
 #[get("/am-i-logged-in")]
