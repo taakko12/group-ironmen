@@ -3,8 +3,8 @@ use crate::db;
 use crate::error::ApiError;
 use crate::models::{
     AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData, MustBankItem,
-    NewDeath, NewLootDrop, PendingBankPing, RenameGroupMember, RequestBank, SetMemberDiscordId,
-    SHARED_MEMBER,
+    NameChange, NewDeath, NewLootDrop, PendingBankPing, RenameGroupMember, RequestBank,
+    SetMemberDiscordId, SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
 use actix_web::{delete, get, post, put, web, Error, HttpResponse};
@@ -168,6 +168,17 @@ pub async fn get_skill_data(
     let group_skill_data =
         db::get_skills_for_period(&client, auth.group_id, aggregate_period).await?;
     Ok(web::Json(group_skill_data))
+}
+
+#[post("/name-changes")]
+pub async fn add_name_change(
+    auth: Authenticated,
+    body: web::Json<NameChange>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::record_name_change(&client, auth.group_id, &body.old_name, &body.new_name).await?;
+    Ok(HttpResponse::Created().finish())
 }
 
 #[post("/loot-drop")]

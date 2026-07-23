@@ -135,6 +135,13 @@ pub struct SetMemberDiscordId {
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+pub struct NameChange {
+    pub old_name: String,
+    pub new_name: String,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct MustBankItem {
     pub item_id: i32,
 }

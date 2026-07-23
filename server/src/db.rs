@@ -134,6 +134,27 @@ pub async fn get_member_id(
     Ok(member_id)
 }
 
+/// Like `get_member_id`, but returns `Ok(None)` instead of an error when no
+/// such member exists, so callers (e.g. the bot posting loot/deaths for a
+/// name that doesn't exactly match a registered member) can surface a clear
+/// validation error instead of a generic 500.
+async fn try_get_member_id(
+    client: &Client,
+    group_id: i64,
+    member_name: &str,
+) -> Result<Option<i64>, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            "SELECT member_id FROM groupironman.members WHERE group_id=$1 AND member_name=$2",
+        )
+        .await?;
+    let row = client.query_opt(&stmt, &[&group_id, &member_name]).await?;
+    match row {
+        Some(row) => Ok(Some(row.try_get(0)?)),
+        None => Ok(None),
+    }
+}
+
 pub async fn delete_group_member(
     client: &mut Client,
     group_id: i64,
@@ -177,7 +198,57 @@ pub async fn rename_group_member(
         .execute(&stmt, &[&new_name, &group_id, &original_name])
         .await
         .map_err(ApiError::RenameGroupMemberError)?;
+    record_name_change(client, group_id, original_name, new_name).await?;
     Ok(())
+}
+
+/// Records that `old_name` now goes by `new_name`, so historical Discord
+/// messages (e.g. from `/scrape`) referencing the old RSN still resolve to
+/// the right member. Called automatically by `rename_group_member`; also
+/// exposed directly via `/name-changes` for backfilling renames that
+/// happened before this tracking existed.
+pub async fn record_name_change(
+    client: &Client,
+    group_id: i64,
+    old_name: &str,
+    new_name: &str,
+) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+INSERT INTO groupironman.name_changes (group_id, old_name, new_name)
+VALUES ($1, $2, $3)
+ON CONFLICT (group_id, old_name) DO UPDATE SET new_name=excluded.new_name
+"#,
+        )
+        .await?;
+    client.execute(&stmt, &[&group_id, &old_name, &new_name]).await?;
+    Ok(())
+}
+
+/// Follows the name_changes chain (old -> new -> newer -> ...) to resolve a
+/// possibly-stale name to whatever it's currently known as, capped to avoid
+/// looping forever on bad data.
+async fn resolve_member_name(client: &Client, group_id: i64, name: &str) -> Result<String, ApiError> {
+    let stmt = client
+        .prepare_cached("SELECT new_name FROM groupironman.name_changes WHERE group_id=$1 AND old_name=$2")
+        .await?;
+
+    let mut current = name.to_string();
+    for _ in 0..10 {
+        let row = client.query_opt(&stmt, &[&group_id, &current]).await?;
+        match row {
+            Some(row) => {
+                let next: String = row.try_get(0)?;
+                if next == current {
+                    break;
+                }
+                current = next;
+            }
+            None => break,
+        }
+    }
+    Ok(current)
 }
 
 pub async fn is_member_in_group(
@@ -468,7 +539,16 @@ pub async fn add_loot_drop(
     group_id: i64,
     loot_drop: &NewLootDrop,
 ) -> Result<(), ApiError> {
-    let member_id = get_member_id(client, group_id, &loot_drop.member_name).await?;
+    let resolved_name = resolve_member_name(client, group_id, &loot_drop.member_name).await?;
+    let member_id = match try_get_member_id(client, group_id, &resolved_name).await? {
+        Some(member_id) => member_id,
+        None => {
+            return Err(ApiError::GroupMemberValidationError(format!(
+                "No member named '{}' in this group",
+                loot_drop.member_name
+            )))
+        }
+    };
 
     let stmt = client
         .prepare_cached(
@@ -541,7 +621,16 @@ ORDER BY d.recorded_at ASC
 }
 
 pub async fn add_death(client: &Client, group_id: i64, death: &NewDeath) -> Result<(), ApiError> {
-    let member_id = get_member_id(client, group_id, &death.member_name).await?;
+    let resolved_name = resolve_member_name(client, group_id, &death.member_name).await?;
+    let member_id = match try_get_member_id(client, group_id, &resolved_name).await? {
+        Some(member_id) => member_id,
+        None => {
+            return Err(ApiError::GroupMemberValidationError(format!(
+                "No member named '{}' in this group",
+                death.member_name
+            )))
+        }
+    };
 
     let stmt = client
         .prepare_cached(
@@ -610,7 +699,15 @@ pub async fn set_member_discord_id(
     member_name: &str,
     discord_id: Option<&str>,
 ) -> Result<(), ApiError> {
-    let member_id = get_member_id(client, group_id, member_name).await?;
+    let member_id = match try_get_member_id(client, group_id, member_name).await? {
+        Some(member_id) => member_id,
+        None => {
+            return Err(ApiError::GroupMemberValidationError(format!(
+                "No member named '{}' in this group",
+                member_name
+            )))
+        }
+    };
 
     let stmt = client
         .prepare_cached("UPDATE groupironman.members SET discord_id=$1 WHERE member_id=$2")
@@ -679,7 +776,15 @@ pub async fn add_manual_bank_ping(
     member_name: &str,
     item_id: i32,
 ) -> Result<(), ApiError> {
-    let member_id = get_member_id(client, group_id, member_name).await?;
+    let member_id = match try_get_member_id(client, group_id, member_name).await? {
+        Some(member_id) => member_id,
+        None => {
+            return Err(ApiError::GroupMemberValidationError(format!(
+                "No member named '{}' in this group",
+                member_name
+            )))
+        }
+    };
 
     let stmt = client
         .prepare_cached(
@@ -1337,6 +1442,27 @@ CREATE INDEX IF NOT EXISTS bank_pings_member_item_idx ON groupironman.bank_pings
             .await?;
 
         commit_migration(&transaction, "create_bank_ping_tables").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "create_name_changes_table").await? {
+        let transaction = client.transaction().await?;
+
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.name_changes (
+    group_id BIGINT NOT NULL REFERENCES groupironman.groups(group_id),
+    old_name TEXT NOT NULL,
+    new_name TEXT NOT NULL,
+    PRIMARY KEY (group_id, old_name)
+);
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "create_name_changes_table").await?;
         transaction.commit().await?;
     }
 
