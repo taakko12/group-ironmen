@@ -872,13 +872,17 @@ fn decode_item_ids(raw: &Option<Vec<i32>>) -> HashSet<i32> {
     ids
 }
 
-const INACTIVE_THRESHOLD_MINUTES: i64 = 5;
+// Deliberately much longer than the frontend's 5-minute "inactive" indicator
+// threshold (site/src/data/member-data.js) -- that's just a UI dimming cue,
+// while this gates an actual Discord ping, so it needs enough slack that a
+// loading screen or brief alt-tab doesn't trigger a false alarm.
+const INACTIVE_THRESHOLD_MINUTES: i64 = 40;
 const BANK_PING_COOLDOWN_HOURS: i64 = 6;
 
-/// Detects members who are inactive (matching the frontend's 5-minute
-/// threshold) while still holding a tagged "must bank" item, records new
-/// offline pings for them (deduped via a cooldown window), then drains and
-/// returns every undelivered ping (offline + manual) for the group.
+/// Detects members who have been inactive for over `INACTIVE_THRESHOLD_MINUTES`
+/// while still holding a tagged "must bank" item, records new offline pings
+/// for them (deduped via a cooldown window), then drains and returns every
+/// undelivered ping (offline + manual) for the group.
 pub async fn poll_bank_pings(client: &Client, group_id: i64) -> Result<Vec<PendingBankPing>, ApiError> {
     let must_bank_items: HashSet<i32> = get_must_bank_items(client, group_id).await?.into_iter().collect();
 
