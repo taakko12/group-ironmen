@@ -1,6 +1,8 @@
 import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
 
+const LIVE_REFRESH_INTERVAL_MS = 30000;
+
 export class DashboardPage extends BaseElement {
   constructor() {
     super();
@@ -22,6 +24,20 @@ export class DashboardPage extends BaseElement {
     this.eventListener(this.periodSelect, "change", this.handlePeriodChange.bind(this));
 
     this.subscribeOnce("get-group-data", this.load.bind(this));
+    this.liveRefreshInterval = window.setInterval(this.handleLiveRefresh.bind(this), LIVE_REFRESH_INTERVAL_MS);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this.liveRefreshInterval) {
+      window.clearInterval(this.liveRefreshInterval);
+    }
+  }
+
+  handleLiveRefresh() {
+    if (this.currentGroupData) {
+      this.loadWomAndRender();
+    }
   }
 
   handlePeriodChange() {
@@ -42,7 +58,11 @@ export class DashboardPage extends BaseElement {
   }
 
   async loadWomAndRender() {
-    this.cardsContainer.innerHTML = '<div class="loader"></div>';
+    // Only show the loader on a genuinely empty container -- live background
+    // refreshes shouldn't blank out cards the user might be reading.
+    if (!this.cardsContainer.children.length) {
+      this.cardsContainer.innerHTML = '<div class="loader"></div>';
+    }
 
     try {
       const [womGains, lootData, deathData] = await Promise.all([
@@ -58,6 +78,7 @@ export class DashboardPage extends BaseElement {
   }
 
   renderCards(womGains, lootData, deathData) {
+    const activeTabs = this.captureActiveTabs();
     const members = [...this.currentGroupData.members.values()].filter((member) => member.name !== "@SHARED");
     const lootByName = new Map(lootData.map((member) => [member.name, member.drops]));
     const deathByName = new Map(deathData.map((member) => [member.name, member.deaths]));
@@ -71,7 +92,7 @@ export class DashboardPage extends BaseElement {
         const mostRecentDeath = [...deaths].sort((a, b) => new Date(b.time) - new Date(a.time))[0];
 
         return `
-<div class="dashboard-page__card rsborder rsbackground">
+<div class="dashboard-page__card rsborder rsbackground" data-member="${member.name}">
   <h3>${member.name}</h3>
   <div class="dashboard-page__tabs">
     <button type="button" class="dashboard-page__tab dashboard-page__tab--active" data-tab="overview">Overview</button>
@@ -112,15 +133,43 @@ export class DashboardPage extends BaseElement {
     for (const subtab of this.cardsContainer.querySelectorAll(".dashboard-page__stats-subtab")) {
       this.eventListener(subtab, "click", this.handleStatsSubtabClick.bind(this));
     }
+
+    this.restoreActiveTabs(activeTabs);
+  }
+
+  // Live background refreshes rebuild every card's innerHTML, which would
+  // otherwise silently reset anyone's open "Stats" tab back to "Overview"
+  // every 30 seconds -- capture/restore keeps whatever each card was showing.
+  captureActiveTabs() {
+    const activeTabs = new Map();
+    for (const card of this.cardsContainer.querySelectorAll(".dashboard-page__card")) {
+      const member = card.dataset.member;
+      if (!member) continue;
+      activeTabs.set(member, {
+        tab: card.querySelector(".dashboard-page__tab--active")?.dataset.tab,
+        subtab: card.querySelector(".dashboard-page__stats-subtab--active")?.dataset.subtab,
+      });
+    }
+    return activeTabs;
+  }
+
+  restoreActiveTabs(activeTabs) {
+    for (const card of this.cardsContainer.querySelectorAll(".dashboard-page__card")) {
+      const saved = activeTabs.get(card.dataset.member);
+      if (!saved) continue;
+      if (saved.tab) this.setActiveTab(card, saved.tab);
+      if (saved.subtab) this.setActiveStatsSubtab(card, saved.subtab);
+    }
   }
 
   handleTabClick(event) {
     const button = event.currentTarget;
-    const card = button.closest(".dashboard-page__card");
-    const tab = button.dataset.tab;
+    this.setActiveTab(button.closest(".dashboard-page__card"), button.dataset.tab);
+  }
 
+  setActiveTab(card, tab) {
     for (const b of card.querySelectorAll(".dashboard-page__tab")) {
-      b.classList.toggle("dashboard-page__tab--active", b === button);
+      b.classList.toggle("dashboard-page__tab--active", b.dataset.tab === tab);
     }
     for (const panel of card.querySelectorAll(".dashboard-page__tab-panel")) {
       panel.classList.toggle("dashboard-page__tab-panel--hidden", panel.dataset.panel !== tab);
@@ -129,11 +178,12 @@ export class DashboardPage extends BaseElement {
 
   handleStatsSubtabClick(event) {
     const button = event.currentTarget;
-    const card = button.closest(".dashboard-page__card");
-    const subtab = button.dataset.subtab;
+    this.setActiveStatsSubtab(button.closest(".dashboard-page__card"), button.dataset.subtab);
+  }
 
+  setActiveStatsSubtab(card, subtab) {
     for (const b of card.querySelectorAll(".dashboard-page__stats-subtab")) {
-      b.classList.toggle("dashboard-page__stats-subtab--active", b === button);
+      b.classList.toggle("dashboard-page__stats-subtab--active", b.dataset.subtab === subtab);
     }
     for (const panel of card.querySelectorAll(".dashboard-page__stats-subpanel")) {
       panel.classList.toggle("dashboard-page__stats-subpanel--hidden", panel.dataset.subpanel !== subtab);
@@ -172,26 +222,47 @@ export class DashboardPage extends BaseElement {
   static recentDropHtml(drop) {
     if (!drop) return '<div class="dashboard-page__no-data">None recorded</div>';
     const imageUrl = drop.screenshot_url || drop.image_url;
-    const img = imageUrl
-      ? `<img class="dashboard-page__screenshot" src="${imageUrl}" loading="lazy" onerror="this.style.display='none'" />`
-      : "";
     const label = `${drop.item_name} (${drop.gp_value.toLocaleString()} gp)`;
-    const content = `${img}<span class="dashboard-page__activity-label">${label}</span>`;
-    return drop.message_link
-      ? `<a class="dashboard-page__activity-link" href="${drop.message_link}" target="_blank" rel="noopener">${content}</a>`
-      : `<div class="dashboard-page__activity-link">${content}</div>`;
+    return DashboardPage.activityHtml(imageUrl, label, drop.message_link);
   }
 
   static recentDeathHtml(death) {
     if (!death) return '<div class="dashboard-page__no-data">None recorded</div>';
-    const img = death.image_url
-      ? `<img class="dashboard-page__screenshot" src="${death.image_url}" loading="lazy" onerror="this.style.display='none'" />`
-      : "";
     const label = new Date(death.time).toLocaleString();
-    const content = `${img}<span class="dashboard-page__activity-label">${label}</span>`;
-    return death.message_link
-      ? `<a class="dashboard-page__activity-link" href="${death.message_link}" target="_blank" rel="noopener">${content}</a>`
-      : `<div class="dashboard-page__activity-link">${content}</div>`;
+    return DashboardPage.activityHtml(death.image_url, label, death.message_link);
+  }
+
+  // Clicking the screenshot opens the raw image directly; a small corner
+  // button opens the original Discord message instead, so both actions are
+  // available without an oversized "View in Discord" label cluttering the
+  // card. When there's no screenshot to anchor it to, the Discord link
+  // falls back to a small text link instead of a floating overlay.
+  static activityHtml(imageUrl, label, messageLink) {
+    let media = "";
+    if (imageUrl) {
+      const discordOverlay = messageLink
+        ? `<a class="dashboard-page__discord-link" href="${messageLink}" target="_blank" rel="noopener" title="View in Discord">↗</a>`
+        : "";
+      media = `
+<div class="dashboard-page__screenshot-wrap">
+  <a class="dashboard-page__screenshot-link" href="${imageUrl}" target="_blank" rel="noopener">
+    <img class="dashboard-page__screenshot" src="${imageUrl}" loading="lazy" onerror="this.closest('.dashboard-page__screenshot-wrap').style.display='none'" />
+  </a>
+  ${discordOverlay}
+</div>`;
+    }
+
+    const standaloneDiscordLink =
+      !imageUrl && messageLink
+        ? `<a class="dashboard-page__discord-link dashboard-page__discord-link--standalone" href="${messageLink}" target="_blank" rel="noopener">View in Discord ↗</a>`
+        : "";
+
+    return `
+<div class="dashboard-page__activity-link">
+  ${media}
+  <span class="dashboard-page__activity-label">${label}</span>
+  ${standaloneDiscordLink}
+</div>`;
   }
 }
 customElements.define("dashboard-page", DashboardPage);

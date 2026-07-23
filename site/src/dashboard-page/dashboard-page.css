@@ -206,19 +206,22 @@ dashboard-page {
   flex-direction: column;
   gap: 8px;
   color: var(--primary-text);
-  text-decoration: none;
   background: rgba(255, 255, 255, 0.04);
   border-radius: 6px;
   padding: 8px;
 }
 
-a.dashboard-page__activity-link:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
 .dashboard-page__activity-label {
   font-size: 0.95em;
   padding: 0 2px;
+}
+
+.dashboard-page__screenshot-wrap {
+  position: relative;
+}
+
+.dashboard-page__screenshot-link {
+  display: block;
 }
 
 .dashboard-page__screenshot {
@@ -229,6 +232,49 @@ a.dashboard-page__activity-link:hover {
   background: rgba(0, 0, 0, 0.35);
   border-radius: 4px;
   flex-shrink: 0;
+  transition: filter 0.15s ease;
+}
+
+.dashboard-page__screenshot-link:hover .dashboard-page__screenshot {
+  filter: brightness(1.1);
+}
+
+.dashboard-page__discord-link {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  color: white;
+  text-decoration: none;
+  font-size: 0.9em;
+  line-height: 1;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.dashboard-page__discord-link:hover {
+  opacity: 1;
+  background: rgba(88, 101, 242, 0.85);
+}
+
+.dashboard-page__discord-link--standalone {
+  position: static;
+  align-self: flex-start;
+  width: auto;
+  height: auto;
+  padding: 3px 8px;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+.dashboard-page__discord-link--standalone:hover {
+  opacity: 1;
 }
 
 .dashboard-page__no-data {
