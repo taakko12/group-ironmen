@@ -9,17 +9,34 @@ use server::update_batcher;
 use actix_cors::Cors;
 use actix_web::{http::header, middleware, web, App, HttpServer};
 use tokio::sync::mpsc;
-use tokio_postgres::NoTls;
+use tokio_postgres_rustls::MakeRustlsConnect;
 
 use mimalloc::MiMalloc;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+/// Builds a TLS connector for Postgres. Supabase (and most managed Postgres)
+/// require SSL; local/docker-compose Postgres without SSL still works because
+/// tokio-postgres defaults to sslmode=prefer and falls back to plaintext when
+/// the server declines the SSL request.
+fn tls_connector() -> MakeRustlsConnect {
+    let mut root_store = rustls::RootCertStore::empty();
+    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let tls_config = rustls::ClientConfig::builder()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    MakeRustlsConnect::new(tls_config)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("failed to install rustls crypto provider");
+
     let config = Config::from_env().unwrap();
-    let pool = config.pg.create_pool(None, NoTls).unwrap();
+    let pool = config.pg.create_pool(None, tls_connector()).unwrap();
     env_logger::init_from_env(
         env_logger::Env::new().default_filter_or(config.logger.level.to_string()),
     );
@@ -30,7 +47,7 @@ async fn main() -> std::io::Result<()> {
     unauthed::start_ge_updater();
     unauthed::start_skills_aggregator(pool.clone());
 
-    let update_batcher_pool = config.pg.create_pool(None, NoTls).unwrap();
+    let update_batcher_pool = config.pg.create_pool(None, tls_connector()).unwrap();
     let (tx, rx) = mpsc::channel::<models::GroupMember>(10000);
     tokio::spawn(async move {
         update_batcher::background_worker(update_batcher_pool, rx, None).await;
