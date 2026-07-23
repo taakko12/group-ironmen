@@ -1,13 +1,13 @@
-loot-deaths {
+loot-page {
   display: block;
 }
 
-.loot-deaths__control-container {
+.loot-page__control-container {
   display: flex;
   overflow-x: auto;
 }
 
-.loot-deaths__chart-container {
+.loot-page__chart-container {
   width: 100%;
   height: 320px;
   position: relative;
@@ -16,41 +16,31 @@ loot-deaths {
   padding: 12px;
 }
 
-.loot-deaths__loader {
+.loot-page__loader {
   position: absolute;
 }
 
-.loot-deaths__panels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+.loot-page__panel {
   margin-top: 12px;
-}
-
-.loot-deaths__panel {
-  flex: 1 1 320px;
   box-sizing: border-box;
   padding: 12px;
 }
 
-.loot-deaths__panel h3 {
+.loot-page__panel h3 {
   margin-top: 0;
 }
 
-.loot-deaths__leaderboard table,
-.loot-deaths__deaths-list table {
+.loot-page__leaderboard table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.loot-deaths__leaderboard th,
-.loot-deaths__deaths-list th {
+.loot-page__leaderboard th {
   text-align: left;
   opacity: 0.8;
 }
 
-.loot-deaths__leaderboard td,
-.loot-deaths__deaths-list td {
+.loot-page__leaderboard td {
   padding: 4px 0;
   border-bottom: 1px solid var(--light-border);
 }

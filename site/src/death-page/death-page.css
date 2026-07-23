@@ -1,0 +1,33 @@
+death-page {
+  display: block;
+}
+
+.death-page__control-container {
+  display: flex;
+  overflow-x: auto;
+}
+
+.death-page__panel {
+  margin-top: 12px;
+  box-sizing: border-box;
+  padding: 12px;
+}
+
+.death-page__panel h3 {
+  margin-top: 0;
+}
+
+.death-page__leaderboard table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.death-page__leaderboard th {
+  text-align: left;
+  opacity: 0.8;
+}
+
+.death-page__leaderboard td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--light-border);
+}

@@ -2,13 +2,13 @@
 import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
 
-export class LootDeaths extends BaseElement {
+export class LootPage extends BaseElement {
   constructor() {
     super();
   }
 
   html() {
-    return `{{loot-deaths.html}}`;
+    return `{{loot-page.html}}`;
   }
 
   connectedCallback() {
@@ -16,11 +16,10 @@ export class LootDeaths extends BaseElement {
     this.render();
     this.period = "Day";
 
-    this.leaderboardContainer = this.querySelector(".loot-deaths__leaderboard");
-    this.deathsContainer = this.querySelector(".loot-deaths__deaths-list");
-    this.chartContainer = this.querySelector(".loot-deaths__chart-container");
-    this.refreshButton = this.querySelector(".loot-deaths__refresh");
-    this.periodSelect = this.querySelector(".loot-deaths__period-select");
+    this.leaderboardContainer = this.querySelector(".loot-page__leaderboard");
+    this.chartContainer = this.querySelector(".loot-page__chart-container");
+    this.refreshButton = this.querySelector(".loot-page__refresh");
+    this.periodSelect = this.querySelector(".loot-page__period-select");
     this.eventListener(this.refreshButton, "click", this.handleRefreshClicked.bind(this));
     this.eventListener(this.periodSelect, "change", this.handlePeriodChange.bind(this));
 
@@ -36,7 +35,7 @@ export class LootDeaths extends BaseElement {
 
   handlePeriodChange() {
     this.period = this.periodSelect.value;
-    if (this.lootData && this.deathData) {
+    if (this.lootData) {
       this.renderAll();
     }
   }
@@ -50,14 +49,13 @@ export class LootDeaths extends BaseElement {
     this.currentGroupData = groupData;
 
     const loader = document.createElement("div");
-    loader.classList.add("loot-deaths__loader");
+    loader.classList.add("loot-page__loader");
     loader.classList.add("loader");
     this.chartContainer.appendChild(loader);
 
     try {
-      const [lootData, deathData] = await Promise.all([api.getLootData(), api.getDeathData(), this.waitForChartjs()]);
+      const [lootData] = await Promise.all([api.getLootData(), this.waitForChartjs()]);
       this.lootData = lootData;
-      this.deathData = deathData;
       this.renderAll();
     } catch (err) {
       console.error(err);
@@ -66,18 +64,13 @@ export class LootDeaths extends BaseElement {
   }
 
   renderAll() {
-    const cutoff = LootDeaths.cutoffForPeriod(this.period);
+    const cutoff = LootPage.cutoffForPeriod(this.period);
     const filteredLoot = this.lootData.map((member) => ({
       name: member.name,
       drops: member.drops.filter((drop) => new Date(drop.time) >= cutoff),
     }));
-    const filteredDeaths = this.deathData.map((member) => ({
-      name: member.name,
-      deaths: member.deaths.filter((death) => new Date(death.time) >= cutoff),
-    }));
 
     this.renderLeaderboard(filteredLoot);
-    this.renderDeathLeaderboard(filteredDeaths);
     this.renderChart(filteredLoot);
   }
 
@@ -125,31 +118,8 @@ export class LootDeaths extends BaseElement {
 </table>`;
   }
 
-  renderDeathLeaderboard(deathData) {
-    const rows = deathData
-      .map((member) => ({ name: member.name, count: member.deaths.length }))
-      .filter((row) => row.count > 0)
-      .sort((a, b) => b.count - a.count);
-
-    this.deathsContainer.innerHTML = `
-<table>
-  <thead><tr><th>Name</th><th>Deaths</th></tr></thead>
-  <tbody>
-    ${rows
-      .map(
-        (row) => `
-    <tr>
-      <td>${row.name}</td>
-      <td>${row.count}</td>
-    </tr>`
-      )
-      .join("")}
-  </tbody>
-</table>`;
-  }
-
   renderChart(lootData) {
-    this.chartContainer.innerHTML = '<canvas class="loot-deaths__canvas"></canvas>';
+    this.chartContainer.innerHTML = '<canvas class="loot-page__canvas"></canvas>';
     const ctx = this.chartContainer.querySelector("canvas").getContext("2d");
 
     const allTimes = new Set();
@@ -222,10 +192,10 @@ export class LootDeaths extends BaseElement {
   }
 
   async waitForChartjs() {
-    if (!LootDeaths.chartJsScriptTag) {
-      LootDeaths.chartJsScriptTag = document.createElement("script");
-      LootDeaths.chartJsScriptTag.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js";
-      document.body.appendChild(LootDeaths.chartJsScriptTag);
+    if (!LootPage.chartJsScriptTag) {
+      LootPage.chartJsScriptTag = document.createElement("script");
+      LootPage.chartJsScriptTag.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js";
+      document.body.appendChild(LootPage.chartJsScriptTag);
     }
 
     while (typeof Chart === "undefined") {
@@ -234,4 +204,4 @@ export class LootDeaths extends BaseElement {
   }
 }
 
-customElements.define("loot-deaths", LootDeaths);
+customElements.define("loot-page", LootPage);
