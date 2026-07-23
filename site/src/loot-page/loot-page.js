@@ -17,6 +17,7 @@ export class LootPage extends BaseElement {
     this.period = "Day";
 
     this.leaderboardContainer = this.querySelector(".loot-page__leaderboard");
+    this.logContainer = this.querySelector(".loot-page__log");
     this.chartContainer = this.querySelector(".loot-page__chart-container");
     this.refreshButton = this.querySelector(".loot-page__refresh");
     this.periodSelect = this.querySelector(".loot-page__period-select");
@@ -97,6 +98,41 @@ export class LootPage extends BaseElement {
 
     this.renderLeaderboard(filteredLoot);
     this.renderChart(filteredLoot);
+    this.renderLog(filteredLoot);
+  }
+
+  renderLog(lootData) {
+    const entries = lootData
+      .flatMap((member) => member.drops.map((drop) => ({ ...drop, memberName: member.name })))
+      .sort((a, b) => new Date(b.time) - new Date(a.time));
+
+    if (entries.length === 0) {
+      this.logContainer.innerHTML = '<div class="loot-page__no-data">No drops recorded</div>';
+      return;
+    }
+
+    this.logContainer.innerHTML = `
+<table>
+  <thead><tr><th>Time</th><th>Player</th><th>Item</th><th>Value</th></tr></thead>
+  <tbody>
+    ${entries.map((entry) => LootPage.logRowHtml(entry)).join("")}
+  </tbody>
+</table>`;
+  }
+
+  static logRowHtml(entry) {
+    const time = new Date(entry.time).toLocaleString();
+    const itemCell = entry.message_link
+      ? `<a href="${entry.message_link}" target="_blank" rel="noopener">${entry.item_name}</a>`
+      : entry.item_name;
+
+    return `
+<tr>
+  <td>${time}</td>
+  <td>${entry.memberName}</td>
+  <td>${itemCell}</td>
+  <td>${entry.gp_value.toLocaleString()} gp</td>
+</tr>`;
   }
 
   static periodLabel(period) {

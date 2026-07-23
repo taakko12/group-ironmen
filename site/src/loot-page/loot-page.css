@@ -63,3 +63,47 @@ loot-page {
   object-fit: cover;
   border-radius: 2px;
 }
+
+.loot-page__log {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.loot-page__log table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.loot-page__log th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  opacity: 0.8;
+  background: var(--rsbackground);
+  background-repeat: repeat;
+  padding-bottom: 4px;
+}
+
+.dark-mode .loot-page__log th {
+  background: var(--rsbackground-dark);
+}
+
+.loot-page__log td {
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--light-border);
+  white-space: nowrap;
+}
+
+.loot-page__log a {
+  color: var(--primary-text);
+}
+
+.loot-page__log a:hover {
+  text-decoration: underline;
+}
+
+.loot-page__no-data {
+  opacity: 0.5;
+  font-style: italic;
+  padding: 8px 0;
+}
