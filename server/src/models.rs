@@ -89,6 +89,11 @@ pub struct NewLootDrop {
     pub item_name: String,
     pub gp_value: i64,
     pub image_url: Option<String>,
+    /// The actual gameplay screenshot (embed image/attachment), distinct
+    /// from `image_url` which is just the item's wiki sprite.
+    pub screenshot_url: Option<String>,
+    /// Link back to the original Discord message the drop was posted in.
+    pub message_link: Option<String>,
     pub discord_message_id: Option<String>,
     #[serde(default)]
     pub embed_index: i32,
@@ -102,6 +107,8 @@ pub struct LootDropEntry {
     pub item_name: String,
     pub gp_value: i64,
     pub image_url: Option<String>,
+    pub screenshot_url: Option<String>,
+    pub message_link: Option<String>,
     pub time: DateTime<Utc>,
 }
 #[derive(Serialize)]
@@ -116,12 +123,14 @@ pub type GroupLootData = Vec<MemberLootData>;
 pub struct NewDeath {
     pub member_name: String,
     pub image_url: Option<String>,
+    pub message_link: Option<String>,
     pub discord_message_id: Option<String>,
     pub time: Option<DateTime<Utc>>,
 }
 #[derive(Serialize)]
 pub struct DeathEntry {
     pub image_url: Option<String>,
+    pub message_link: Option<String>,
     pub time: DateTime<Utc>,
 }
 #[derive(Serialize)]

@@ -562,10 +562,10 @@ pub async fn add_loot_drop(
     let stmt = client
         .prepare_cached(
             r#"
-INSERT INTO groupironman.loot_drops (member_id, item_name, gp_value, image_url, discord_message_id, embed_index, recorded_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO groupironman.loot_drops (member_id, item_name, gp_value, image_url, screenshot_url, message_link, discord_message_id, embed_index, recorded_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (member_id, discord_message_id, embed_index) WHERE discord_message_id IS NOT NULL
-DO UPDATE SET recorded_at = excluded.recorded_at
+DO UPDATE SET recorded_at = excluded.recorded_at, screenshot_url = excluded.screenshot_url, message_link = excluded.message_link
 "#,
         )
         .await?;
@@ -577,6 +577,8 @@ DO UPDATE SET recorded_at = excluded.recorded_at
                 &loot_drop.item_name,
                 &loot_drop.gp_value,
                 &loot_drop.image_url,
+                &loot_drop.screenshot_url,
+                &loot_drop.message_link,
                 &loot_drop.discord_message_id,
                 &loot_drop.embed_index,
                 &recorded_at,
@@ -592,7 +594,7 @@ pub async fn get_loot_data(client: &Client, group_id: i64) -> Result<GroupLootDa
     let stmt = client
         .prepare_cached(
             r#"
-SELECT member_name, item_name, gp_value, image_url, recorded_at
+SELECT member_name, item_name, gp_value, image_url, screenshot_url, message_link, recorded_at
 FROM groupironman.loot_drops d
 INNER JOIN groupironman.members m ON m.member_id=d.member_id
 WHERE m.group_id=$1
@@ -612,6 +614,8 @@ ORDER BY d.recorded_at ASC
             item_name: row.try_get("item_name")?,
             gp_value: row.try_get("gp_value")?,
             image_url: row.try_get("image_url")?,
+            screenshot_url: row.try_get("screenshot_url")?,
+            message_link: row.try_get("message_link")?,
             time: row.try_get("recorded_at")?,
         };
 
@@ -648,17 +652,23 @@ pub async fn add_death(client: &Client, group_id: i64, death: &NewDeath) -> Resu
     let stmt = client
         .prepare_cached(
             r#"
-INSERT INTO groupironman.deaths (member_id, image_url, discord_message_id, recorded_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO groupironman.deaths (member_id, image_url, message_link, discord_message_id, recorded_at)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (member_id, discord_message_id) WHERE discord_message_id IS NOT NULL
-DO UPDATE SET recorded_at = excluded.recorded_at
+DO UPDATE SET recorded_at = excluded.recorded_at, message_link = excluded.message_link
 "#,
         )
         .await?;
     client
         .execute(
             &stmt,
-            &[&member_id, &death.image_url, &death.discord_message_id, &recorded_at],
+            &[
+                &member_id,
+                &death.image_url,
+                &death.message_link,
+                &death.discord_message_id,
+                &recorded_at,
+            ],
         )
         .await
         .map_err(ApiError::AddDeathError)?;
@@ -670,7 +680,7 @@ pub async fn get_death_data(client: &Client, group_id: i64) -> Result<GroupDeath
     let stmt = client
         .prepare_cached(
             r#"
-SELECT member_name, image_url, recorded_at
+SELECT member_name, image_url, message_link, recorded_at
 FROM groupironman.deaths d
 INNER JOIN groupironman.members m ON m.member_id=d.member_id
 WHERE m.group_id=$1
@@ -688,6 +698,7 @@ ORDER BY d.recorded_at ASC
         let member_name: String = row.try_get("member_name")?;
         let entry = DeathEntry {
             image_url: row.try_get("image_url")?,
+            message_link: row.try_get("message_link")?,
             time: row.try_get("recorded_at")?,
         };
 
@@ -1477,6 +1488,32 @@ CREATE TABLE IF NOT EXISTS groupironman.name_changes (
             .await?;
 
         commit_migration(&transaction, "create_name_changes_table").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "add_screenshot_and_message_link_columns").await? {
+        let transaction = client.transaction().await?;
+
+        transaction
+            .execute(
+                r#"
+ALTER TABLE groupironman.loot_drops
+ADD COLUMN IF NOT EXISTS screenshot_url TEXT,
+ADD COLUMN IF NOT EXISTS message_link TEXT;
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+ALTER TABLE groupironman.deaths ADD COLUMN IF NOT EXISTS message_link TEXT;
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "add_screenshot_and_message_link_columns").await?;
         transaction.commit().await?;
     }
 

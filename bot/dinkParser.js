@@ -126,6 +126,13 @@ function parseLootImage(embed) {
   return embed.thumbnail?.url ?? null; // OSRS wiki item sprite
 }
 
+// The actual gameplay screenshot, distinct from the item sprite above --
+// either an embed image or a message attachment.
+function parseLootScreenshot(embed, message = null) {
+  if (embed.image?.url) return embed.image.url;
+  return message?.attachments?.first()?.url ?? null;
+}
+
 function parseLootPlayer(embed, content) {
   if (embed) {
     const authorName = embed.author?.name ?? '';
@@ -181,6 +188,7 @@ module.exports = {
   isLootEmbed,
   parseLootItems,
   parseLootImage,
+  parseLootScreenshot,
   parseLootPlayer,
   parseDeathMessage,
   parseDeathImage,

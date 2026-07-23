@@ -6,11 +6,16 @@ const {
   isLootEmbed,
   parseLootItems,
   parseLootImage,
+  parseLootScreenshot,
   parseLootPlayer,
   parseDeathMessage,
   parseDeathImage,
 } = require('./dinkParser');
 const { postLootDrop, postDeath } = require('./backendClient');
+
+function messageLink(message) {
+  return `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.id}`;
+}
 
 async function processDeathMessage(message) {
   const memberName = parseDeathMessage(message);
@@ -20,6 +25,7 @@ async function processDeathMessage(message) {
     await postDeath({
       member_name: memberName,
       image_url: parseDeathImage(message),
+      message_link: messageLink(message),
       discord_message_id: message.id,
       time: message.createdAt.toISOString(),
     });
@@ -39,6 +45,7 @@ async function processLootMessage(message) {
     const memberName = parseLootPlayer(embed, message.content);
     if (!memberName) continue;
     const imageUrl = parseLootImage(embed);
+    const screenshotUrl = parseLootScreenshot(embed, message);
 
     for (const { item, gpValue } of parseLootItems(embed)) {
       try {
@@ -47,6 +54,8 @@ async function processLootMessage(message) {
           item_name: item,
           gp_value: gpValue,
           image_url: imageUrl,
+          screenshot_url: screenshotUrl,
+          message_link: messageLink(message),
           discord_message_id: message.id,
           embed_index: embedIndex,
           time: message.createdAt.toISOString(),
