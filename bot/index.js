@@ -1,14 +1,8 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
-const {
-  isLootEmbed,
-  parseLootItems,
-  parseLootImage,
-  parseLootPlayer,
-  parseDeathMessage,
-  parseDeathImage,
-} = require('./dinkParser');
-const { postLootDrop, postDeath } = require('./backendClient');
+const fs = require('fs');
+const path = require('path');
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const { processLootMessage, processDeathMessage } = require('./messageProcessor');
 
 const LOOT_CHANNEL_ID = process.env.LOOT_CHANNEL_ID;
 const DEATH_CHANNEL_ID = process.env.DEATH_CHANNEL_ID;
@@ -17,8 +11,35 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
 
+client.commands = new Collection();
+const commandsPath = path.join(__dirname, 'commands');
+if (fs.existsSync(commandsPath)) {
+  for (const file of fs.readdirSync(commandsPath).filter((f) => f.endsWith('.js'))) {
+    const command = require(path.join(commandsPath, file));
+    client.commands.set(command.data.name, command);
+  }
+}
+
 client.once('clientReady', () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Logged in as ${client.user.tag} (${client.commands.size} command(s) loaded)`);
+});
+
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
+
+  try {
+    await command.execute(interaction);
+  } catch (err) {
+    console.error(`[command] /${interaction.commandName} failed: ${err.message}`);
+    const reply = { content: '❌ Something went wrong running that command.', flags: 64 };
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(reply).catch(() => {});
+    } else {
+      await interaction.reply(reply).catch(() => {});
+    }
+  }
 });
 
 client.on('messageCreate', async (message) => {
@@ -26,46 +47,11 @@ client.on('messageCreate', async (message) => {
   if (!message.webhookId) return;
 
   if (DEATH_CHANNEL_ID && message.channelId === DEATH_CHANNEL_ID) {
-    const memberName = parseDeathMessage(message);
-    if (memberName) {
-      try {
-        await postDeath({
-          member_name: memberName,
-          image_url: parseDeathImage(message),
-          discord_message_id: message.id,
-        });
-        console.log(`[death] Recorded death for "${memberName}"`);
-      } catch (err) {
-        console.error(`[death] Failed to record death for "${memberName}": ${err.message}`);
-      }
-    }
+    await processDeathMessage(message);
   }
 
   if (LOOT_CHANNEL_ID && message.channelId === LOOT_CHANNEL_ID) {
-    let embedIndex = 0;
-    for (const embed of message.embeds) {
-      if (!isLootEmbed(embed)) continue;
-      const memberName = parseLootPlayer(embed, message.content);
-      if (!memberName) continue;
-      const imageUrl = parseLootImage(embed);
-
-      for (const { item, gpValue } of parseLootItems(embed)) {
-        try {
-          await postLootDrop({
-            member_name: memberName,
-            item_name: item,
-            gp_value: gpValue,
-            image_url: imageUrl,
-            discord_message_id: message.id,
-            embed_index: embedIndex,
-          });
-          console.log(`[loot] Recorded ${gpValue.toLocaleString()} gp (${item}) for "${memberName}"`);
-        } catch (err) {
-          console.error(`[loot] Failed to record drop for "${memberName}": ${err.message}`);
-        }
-        embedIndex++;
-      }
-    }
+    await processLootMessage(message);
   }
 });
 

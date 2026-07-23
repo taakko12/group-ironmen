@@ -6,6 +6,41 @@ function normalizeName(name) {
   return name.replace(/\s+/gu, ' ').trim();
 }
 
+function dateToSnowflake(date) {
+  return ((BigInt(date.getTime()) - 1420070400000n) << 22n).toString();
+}
+
+// Fetches every message in a channel, optionally only those after a given
+// snowflake, walking Discord's 100-per-page REST limit. Used by /scrape to
+// backfill history the live listener missed.
+async function fetchAllMessages(channel, afterSnowflake = null) {
+  const all = [];
+  if (afterSnowflake) {
+    let lastId = afterSnowflake;
+    while (true) {
+      const batch = await channel.messages.fetch({ limit: 100, after: lastId });
+      if (batch.size === 0) break;
+      const msgs = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+      all.push(...msgs);
+      lastId = msgs[msgs.length - 1].id;
+      if (batch.size < 100) break;
+    }
+  } else {
+    let lastId = null;
+    while (true) {
+      const options = { limit: 100 };
+      if (lastId) options.before = lastId;
+      const batch = await channel.messages.fetch(options);
+      if (batch.size === 0) break;
+      const msgs = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+      all.push(...msgs);
+      lastId = batch.sort((a, b) => a.createdTimestamp - b.createdTimestamp).first().id;
+      if (batch.size < 100) break;
+    }
+  }
+  return all;
+}
+
 function isLootEmbed(embed) {
   const text = `${embed.title ?? ''} ${embed.description ?? ''}`;
   return /loot|looted|received a drop|drop:/i.test(text);
@@ -149,4 +184,6 @@ module.exports = {
   parseLootPlayer,
   parseDeathMessage,
   parseDeathImage,
+  dateToSnowflake,
+  fetchAllMessages,
 };
