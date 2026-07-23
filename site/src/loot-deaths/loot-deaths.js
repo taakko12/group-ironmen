@@ -14,12 +14,15 @@ export class LootDeaths extends BaseElement {
   connectedCallback() {
     super.connectedCallback();
     this.render();
+    this.period = "Day";
 
     this.leaderboardContainer = this.querySelector(".loot-deaths__leaderboard");
     this.deathsContainer = this.querySelector(".loot-deaths__deaths-list");
     this.chartContainer = this.querySelector(".loot-deaths__chart-container");
     this.refreshButton = this.querySelector(".loot-deaths__refresh");
+    this.periodSelect = this.querySelector(".loot-deaths__period-select");
     this.eventListener(this.refreshButton, "click", this.handleRefreshClicked.bind(this));
+    this.eventListener(this.periodSelect, "change", this.handlePeriodChange.bind(this));
 
     this.subscribeOnce("get-group-data", this.load.bind(this));
   }
@@ -28,6 +31,13 @@ export class LootDeaths extends BaseElement {
     super.disconnectedCallback();
     if (this.chart) {
       this.chart.destroy();
+    }
+  }
+
+  handlePeriodChange() {
+    this.period = this.periodSelect.value;
+    if (this.lootData && this.deathData) {
+      this.renderAll();
     }
   }
 
@@ -46,12 +56,44 @@ export class LootDeaths extends BaseElement {
 
     try {
       const [lootData, deathData] = await Promise.all([api.getLootData(), api.getDeathData(), this.waitForChartjs()]);
-      this.renderLeaderboard(lootData);
-      this.renderDeaths(deathData);
-      this.renderChart(lootData);
+      this.lootData = lootData;
+      this.deathData = deathData;
+      this.renderAll();
     } catch (err) {
       console.error(err);
       this.chartContainer.innerHTML = `Failed to load ${err}`;
+    }
+  }
+
+  renderAll() {
+    const cutoff = LootDeaths.cutoffForPeriod(this.period);
+    const filteredLoot = this.lootData.map((member) => ({
+      name: member.name,
+      drops: member.drops.filter((drop) => new Date(drop.time) >= cutoff),
+    }));
+    const filteredDeaths = this.deathData.map((member) => ({
+      name: member.name,
+      deaths: member.deaths.filter((death) => new Date(death.time) >= cutoff),
+    }));
+
+    this.renderLeaderboard(filteredLoot);
+    this.renderDeathLeaderboard(filteredDeaths);
+    this.renderChart(filteredLoot);
+  }
+
+  static cutoffForPeriod(period) {
+    const now = Date.now();
+    const day = 24 * 3600 * 1000;
+    switch (period) {
+      case "Week":
+        return new Date(now - 7 * day);
+      case "Month":
+        return new Date(now - 30 * day);
+      case "Year":
+        return new Date(now - 365 * day);
+      case "Day":
+      default:
+        return new Date(now - day);
     }
   }
 
@@ -83,24 +125,27 @@ export class LootDeaths extends BaseElement {
 </table>`;
   }
 
-  renderDeaths(deathData) {
-    const entries = [];
-    for (const member of deathData) {
-      for (const death of member.deaths) {
-        entries.push({ name: member.name, time: new Date(death.time) });
-      }
-    }
-    entries.sort((a, b) => b.time - a.time);
+  renderDeathLeaderboard(deathData) {
+    const rows = deathData
+      .map((member) => ({ name: member.name, count: member.deaths.length }))
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count);
 
     this.deathsContainer.innerHTML = `
-<ul>
-  ${entries
-    .map(
-      (entry) => `
-  <li><span>${entry.name}</span><span>${entry.time.toLocaleString()}</span></li>`
-    )
-    .join("")}
-</ul>`;
+<table>
+  <thead><tr><th>Name</th><th>Deaths</th></tr></thead>
+  <tbody>
+    ${rows
+      .map(
+        (row) => `
+    <tr>
+      <td>${row.name}</td>
+      <td>${row.count}</td>
+    </tr>`
+      )
+      .join("")}
+  </tbody>
+</table>`;
   }
 
   renderChart(lootData) {
@@ -160,7 +205,7 @@ export class LootDeaths extends BaseElement {
         maintainAspectRatio: false,
         animation: false,
         plugins: {
-          title: { display: true, text: "Total Loot Over Time" },
+          title: { display: true, text: `Total Loot Over Time - ${this.period}` },
           tooltip: {
             callbacks: {
               label: (tooltip) => `${tooltip.dataset.label}: ${tooltip.parsed.y.toLocaleString()} gp`,

@@ -37,25 +37,20 @@ loot-deaths {
   margin-top: 0;
 }
 
-.loot-deaths__leaderboard table {
+.loot-deaths__leaderboard table,
+.loot-deaths__deaths-list table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.loot-deaths__leaderboard th {
+.loot-deaths__leaderboard th,
+.loot-deaths__deaths-list th {
   text-align: left;
   opacity: 0.8;
 }
 
-.loot-deaths__deaths-list ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.loot-deaths__deaths-list li {
-  display: flex;
-  justify-content: space-between;
+.loot-deaths__leaderboard td,
+.loot-deaths__deaths-list td {
   padding: 4px 0;
   border-bottom: 1px solid var(--light-border);
 }
