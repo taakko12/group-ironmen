@@ -1,0 +1,4 @@
+{
+  "buildCommand": "sed -i \"s#\\\"/api\\\"#\\\"$BACKEND_URL/api\\\"#g\" src/data/api.js && npm run bundle",
+  "outputDirectory": "public"
+}
