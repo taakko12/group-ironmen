@@ -162,7 +162,7 @@ pub async fn get_skill_data(
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let aggregate_period = match query.period {
         SkillDataPeriod::Day => db::AggregatePeriod::Day,
-        SkillDataPeriod::Week => db::AggregatePeriod::Month,
+        SkillDataPeriod::Week => db::AggregatePeriod::Week,
         SkillDataPeriod::Month => db::AggregatePeriod::Month,
         SkillDataPeriod::Year => db::AggregatePeriod::Year,
     };

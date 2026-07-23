@@ -273,9 +273,13 @@ export class SkillGraph extends BaseElement {
     const normalizedPeriod = SkillGraph.normalizedPeriod(period);
     if (normalizedPeriod === "Day") {
       return dates.map((date) => date.toLocaleTimeString([], { hour: "numeric" }));
-    } else if (normalizedPeriod === "Week" || normalizedPeriod === "Month") {
+    } else if (normalizedPeriod === "Week") {
       // NOTE: For the rest of these periods we don't know at exactly what time the events occured in the user's timezone
       // due to them being truncated. Just going to display the times in UTC
+      return dates.map((date) =>
+        date.toLocaleString([], { timeZone: "UTC", day: "numeric", month: "short", hour: "numeric" })
+      );
+    } else if (normalizedPeriod === "Month") {
       return dates.map((date) => date.toLocaleDateString([], { timeZone: "UTC", day: "numeric", month: "short" }));
     } else if (normalizedPeriod === "Year") {
       return dates.map((date) => date.toLocaleDateString([], { timeZone: "UTC", year: "numeric", month: "short" }));
@@ -286,7 +290,7 @@ export class SkillGraph extends BaseElement {
     const normalizedPeriod = SkillGraph.normalizedPeriod(period);
     const stepCountsForPeriods = {
       Day: 96,
-      Week: 7,
+      Week: 168,
       Month: 30,
       Year: 12,
     };
@@ -303,7 +307,13 @@ export class SkillGraph extends BaseElement {
         continue;
       }
 
-      if (normalizedPeriod === "Week" || normalizedPeriod === "Month") {
+      if (normalizedPeriod === "Week") {
+        t.setTime(now.getTime() - i * 3600000);
+        result.push(t);
+        continue;
+      }
+
+      if (normalizedPeriod === "Month") {
         t.setDate(now.getDate() - i);
       } else if (normalizedPeriod === "Year") {
         t.setMonth(now.getMonth() - i, 1);
@@ -321,6 +331,11 @@ export class SkillGraph extends BaseElement {
 
     if (normalizedPeriod === "Day") {
       t.setMinutes(Math.floor(t.getMinutes() / 15) * 15, 0, 0);
+      return t;
+    }
+
+    if (normalizedPeriod === "Week") {
+      t.setMinutes(0, 0, 0);
       return t;
     }
 

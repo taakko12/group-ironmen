@@ -87,6 +87,7 @@ DELETE FROM groupironman.skills_{} WHERE member_id=$1
 "#,
         match period {
             AggregatePeriod::Day => "day",
+            AggregatePeriod::Week => "week",
             AggregatePeriod::Month => "month",
             AggregatePeriod::Year => "year",
         }
@@ -163,6 +164,7 @@ pub async fn delete_group_member(
     let member_id = get_member_id(client, group_id, member_name).await?;
     let transaction = client.transaction().await?;
     delete_skills_data_for_member(&transaction, AggregatePeriod::Day, member_id).await?;
+    delete_skills_data_for_member(&transaction, AggregatePeriod::Week, member_id).await?;
     delete_skills_data_for_member(&transaction, AggregatePeriod::Month, member_id).await?;
     delete_skills_data_for_member(&transaction, AggregatePeriod::Year, member_id).await?;
     delete_collection_log_data_for_member(&transaction, member_id).await?;
@@ -368,6 +370,7 @@ FROM groupironman.members WHERE group_id=$2
 
 pub enum AggregatePeriod {
     Day,
+    Week,
     Month,
     Year,
 }
@@ -379,11 +382,14 @@ async fn aggregate_skills_for_period(
     // Day buckets in 15-minute increments (rather than a full hour) so the
     // graph gets a new data point every ~5-20 minutes instead of only at the
     // top of the hour -- otherwise a recently-active member can appear
-    // frozen for up to an hour.
+    // frozen for up to an hour. Week buckets hourly (its own table, distinct
+    // from Month's daily buckets) so the 7-day graph gets ~168 points instead
+    // of ~7 and feels like it's tracking in real time too.
     let truncate_expr = match period {
         AggregatePeriod::Day => {
             "date_trunc('hour', skills_last_update) + INTERVAL '15 min' * FLOOR(EXTRACT(MINUTE FROM skills_last_update) / 15)"
         }
+        AggregatePeriod::Week => "date_trunc('hour', skills_last_update)",
         AggregatePeriod::Month => "date_trunc('day', skills_last_update)",
         AggregatePeriod::Year => "date_trunc('month', skills_last_update)",
     };
@@ -397,6 +403,7 @@ DO UPDATE SET skills=excluded.skills;
 "#,
         match period {
             AggregatePeriod::Day => "day",
+            AggregatePeriod::Week => "week",
             AggregatePeriod::Month => "month",
             AggregatePeriod::Year => "year",
         },
@@ -424,11 +431,13 @@ WHERE time < ($1::timestamptz - interval '{1}') AND (member_id, time) NOT IN (
 "#,
         match period {
             AggregatePeriod::Day => "day",
+            AggregatePeriod::Week => "week",
             AggregatePeriod::Month => "month",
             AggregatePeriod::Year => "year",
         },
         match period {
             AggregatePeriod::Day => "1 day",
+            AggregatePeriod::Week => "7 days",
             AggregatePeriod::Month => "1 month",
             AggregatePeriod::Year => "1 year",
         }
@@ -471,6 +480,7 @@ UPDATE groupironman.aggregation_info SET last_aggregation=NOW() WHERE type='skil
         .await?;
 
     aggregate_skills_for_period(&transaction, AggregatePeriod::Day, &last_aggregation).await?;
+    aggregate_skills_for_period(&transaction, AggregatePeriod::Week, &last_aggregation).await?;
     aggregate_skills_for_period(&transaction, AggregatePeriod::Month, &last_aggregation).await?;
     aggregate_skills_for_period(&transaction, AggregatePeriod::Year, &last_aggregation).await?;
     transaction.commit().await?;
@@ -483,6 +493,8 @@ pub async fn apply_skills_retention(client: &mut Client) -> Result<(), ApiError>
 
     let transaction = client.transaction().await?;
     apply_skills_retention_for_period(&transaction, AggregatePeriod::Day, &last_aggregation)
+        .await?;
+    apply_skills_retention_for_period(&transaction, AggregatePeriod::Week, &last_aggregation)
         .await?;
     apply_skills_retention_for_period(&transaction, AggregatePeriod::Month, &last_aggregation)
         .await?;
@@ -507,6 +519,7 @@ WHERE m.group_id=$1
 "#,
         match period {
             AggregatePeriod::Day => "day",
+            AggregatePeriod::Week => "week",
             AggregatePeriod::Month => "month",
             AggregatePeriod::Year => "year",
         }
@@ -1532,6 +1545,28 @@ ALTER TABLE groupironman.deaths ADD COLUMN IF NOT EXISTS message_link TEXT;
             .await?;
 
         commit_migration(&transaction, "add_screenshot_and_message_link_columns").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "add_skill_week_period").await? {
+        let transaction = client.transaction().await?;
+
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.skills_week (
+    member_id BIGSERIAL REFERENCES groupironman.members(member_id),
+    time TIMESTAMPTZ,
+    skills INTEGER[24],
+
+    PRIMARY KEY (member_id, time)
+);
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "add_skill_week_period").await?;
         transaction.commit().await?;
     }
 
