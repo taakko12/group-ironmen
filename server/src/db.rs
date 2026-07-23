@@ -3,7 +3,7 @@ use crate::error::ApiError;
 use crate::models::{
     AggregateSkillData, CreateGroup, DeathEntry, GroupDeathData, GroupLootData, GroupMember,
     GroupSkillData, LootDropEntry, MemberDeathData, MemberLootData, MemberSkillData, NewDeath,
-    NewLootDrop, SHARED_MEMBER,
+    NewLootDrop, PendingBankPing, SHARED_MEMBER,
 };
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Transaction};
@@ -239,7 +239,7 @@ pub async fn get_group_data(
     let stmt = client
         .prepare_cached(
             r#"
-SELECT member_name,
+SELECT member_name, discord_id,
 GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
 quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
 rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
@@ -273,6 +273,7 @@ FROM groupironman.members WHERE group_id=$2
             group_id: Some(group_id),
             name: member_name,
             last_updated,
+            discord_id: row.try_get("discord_id").ok(),
             stats: row.try_get("stats").ok(),
             coordinates: row.try_get("coordinates").ok(),
             skills: row.try_get("skills").ok(),
@@ -601,6 +602,212 @@ ORDER BY d.recorded_at ASC
     }
 
     Ok(member_data.into_values().collect())
+}
+
+pub async fn set_member_discord_id(
+    client: &Client,
+    group_id: i64,
+    member_name: &str,
+    discord_id: Option<&str>,
+) -> Result<(), ApiError> {
+    let member_id = get_member_id(client, group_id, member_name).await?;
+
+    let stmt = client
+        .prepare_cached("UPDATE groupironman.members SET discord_id=$1 WHERE member_id=$2")
+        .await?;
+    client
+        .execute(&stmt, &[&discord_id, &member_id])
+        .await
+        .map_err(ApiError::SetMemberDiscordIdError)?;
+
+    Ok(())
+}
+
+pub async fn add_must_bank_item(
+    client: &Client,
+    group_id: i64,
+    item_id: i32,
+) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached(
+            "INSERT INTO groupironman.must_bank_items (group_id, item_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .await?;
+    client
+        .execute(&stmt, &[&group_id, &item_id])
+        .await
+        .map_err(ApiError::MustBankItemError)?;
+
+    Ok(())
+}
+
+pub async fn remove_must_bank_item(
+    client: &Client,
+    group_id: i64,
+    item_id: i32,
+) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached("DELETE FROM groupironman.must_bank_items WHERE group_id=$1 AND item_id=$2")
+        .await?;
+    client
+        .execute(&stmt, &[&group_id, &item_id])
+        .await
+        .map_err(ApiError::MustBankItemError)?;
+
+    Ok(())
+}
+
+pub async fn get_must_bank_items(client: &Client, group_id: i64) -> Result<Vec<i32>, ApiError> {
+    let stmt = client
+        .prepare_cached("SELECT item_id FROM groupironman.must_bank_items WHERE group_id=$1")
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::MustBankItemError)?;
+
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        result.push(row.try_get("item_id")?);
+    }
+    Ok(result)
+}
+
+pub async fn add_manual_bank_ping(
+    client: &Client,
+    group_id: i64,
+    member_name: &str,
+    item_id: i32,
+) -> Result<(), ApiError> {
+    let member_id = get_member_id(client, group_id, member_name).await?;
+
+    let stmt = client
+        .prepare_cached(
+            "INSERT INTO groupironman.bank_pings (member_id, item_id, reason) VALUES ($1, $2, 'manual')",
+        )
+        .await?;
+    client
+        .execute(&stmt, &[&member_id, &item_id])
+        .await
+        .map_err(ApiError::RequestBankError)?;
+
+    Ok(())
+}
+
+/// Decodes a raw `[item_id, quantity, item_id, quantity, ...]` column (the
+/// same encoding the frontend's `transformItemsFromStorage` expects) into the
+/// set of valid (id > 0) item ids present.
+fn decode_item_ids(raw: &Option<Vec<i32>>) -> HashSet<i32> {
+    let mut ids = HashSet::new();
+    if let Some(items) = raw {
+        let mut i = 0;
+        while i + 1 < items.len() {
+            if items[i] > 0 {
+                ids.insert(items[i]);
+            }
+            i += 2;
+        }
+    }
+    ids
+}
+
+const INACTIVE_THRESHOLD_MINUTES: i64 = 5;
+const BANK_PING_COOLDOWN_HOURS: i64 = 6;
+
+/// Detects members who are inactive (matching the frontend's 5-minute
+/// threshold) while still holding a tagged "must bank" item, records new
+/// offline pings for them (deduped via a cooldown window), then drains and
+/// returns every undelivered ping (offline + manual) for the group.
+pub async fn poll_bank_pings(client: &Client, group_id: i64) -> Result<Vec<PendingBankPing>, ApiError> {
+    let must_bank_items: HashSet<i32> = get_must_bank_items(client, group_id).await?.into_iter().collect();
+
+    if !must_bank_items.is_empty() {
+        let stmt = client
+            .prepare_cached(
+                r#"
+SELECT member_id, equipment, inventory, bank,
+GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
+quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
+rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
+collection_log_last_update) as last_updated
+FROM groupironman.members WHERE group_id=$1
+"#,
+            )
+            .await?;
+        let rows = client
+            .query(&stmt, &[&group_id])
+            .await
+            .map_err(ApiError::PollBankPingsError)?;
+
+        let now = Utc::now();
+        let insert_sql = format!(
+            r#"
+INSERT INTO groupironman.bank_pings (member_id, item_id, reason)
+SELECT $1, $2, 'offline'
+WHERE NOT EXISTS (
+    SELECT 1 FROM groupironman.bank_pings
+    WHERE member_id=$1 AND item_id=$2 AND reason='offline' AND created_at > NOW() - INTERVAL '{} hours'
+)
+"#,
+            BANK_PING_COOLDOWN_HOURS
+        );
+        let insert_stmt = client.prepare_cached(&insert_sql).await?;
+
+        for row in rows {
+            let last_updated: Option<DateTime<Utc>> = row.try_get("last_updated").ok();
+            let is_inactive = match last_updated {
+                Some(last_updated) => now - last_updated > chrono::Duration::minutes(INACTIVE_THRESHOLD_MINUTES),
+                None => false,
+            };
+            if !is_inactive {
+                continue;
+            }
+
+            let member_id: i64 = row.try_get("member_id")?;
+            let equipment: Option<Vec<i32>> = row.try_get("equipment").ok();
+            let inventory: Option<Vec<i32>> = row.try_get("inventory").ok();
+            let bank: Option<Vec<i32>> = row.try_get("bank").ok();
+
+            let mut held_ids = decode_item_ids(&equipment);
+            held_ids.extend(decode_item_ids(&inventory));
+            held_ids.extend(decode_item_ids(&bank));
+
+            for item_id in held_ids.intersection(&must_bank_items) {
+                client
+                    .execute(&insert_stmt, &[&member_id, item_id])
+                    .await
+                    .map_err(ApiError::PollBankPingsError)?;
+            }
+        }
+    }
+
+    let drain_stmt = client
+        .prepare_cached(
+            r#"
+UPDATE groupironman.bank_pings p
+SET delivered_at = NOW()
+FROM groupironman.members m
+WHERE p.member_id = m.member_id AND m.group_id = $1 AND p.delivered_at IS NULL
+RETURNING m.member_name, m.discord_id, p.item_id, p.reason
+"#,
+        )
+        .await?;
+    let rows = client
+        .query(&drain_stmt, &[&group_id])
+        .await
+        .map_err(ApiError::PollBankPingsError)?;
+
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        result.push(PendingBankPing {
+            member_name: row.try_get("member_name")?,
+            discord_id: row.try_get("discord_id").ok(),
+            item_id: row.try_get("item_id")?,
+            reason: row.try_get("reason")?,
+        });
+    }
+
+    Ok(result)
 }
 
 pub async fn has_migration_run(client: &mut Client, name: &str) -> Result<bool, ApiError> {
@@ -1079,6 +1286,57 @@ CREATE INDEX IF NOT EXISTS deaths_member_time_idx ON groupironman.deaths (member
             .await?;
 
         commit_migration(&transaction, "create_loot_and_death_tables").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "create_bank_ping_tables").await? {
+        let transaction = client.transaction().await?;
+
+        transaction
+            .execute(
+                r#"
+ALTER TABLE groupironman.members ADD COLUMN IF NOT EXISTS discord_id TEXT;
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.must_bank_items (
+    group_id BIGINT NOT NULL REFERENCES groupironman.groups(group_id),
+    item_id INTEGER NOT NULL,
+    PRIMARY KEY (group_id, item_id)
+);
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.bank_pings (
+    id BIGSERIAL PRIMARY KEY,
+    member_id BIGINT NOT NULL REFERENCES groupironman.members(member_id),
+    item_id INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    delivered_at TIMESTAMPTZ
+);
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE INDEX IF NOT EXISTS bank_pings_member_item_idx ON groupironman.bank_pings (member_id, item_id, created_at);
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "create_bank_ping_tables").await?;
         transaction.commit().await?;
     }
 

@@ -83,6 +83,12 @@ async fn main() -> std::io::Result<()> {
             .service(authed::get_loot_data)
             .service(authed::add_death)
             .service(authed::get_death_data)
+            .service(authed::set_member_discord_id)
+            .service(authed::add_must_bank_item)
+            .service(authed::remove_must_bank_item)
+            .service(authed::get_must_bank_items)
+            .service(authed::request_bank)
+            .service(authed::poll_bank_pings)
             .service(authed::get_collection_log);
         let json_config = web::JsonConfig::default().limit(100000);
         let cors = Cors::default()

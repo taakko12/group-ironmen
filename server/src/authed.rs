@@ -2,8 +2,9 @@ use crate::auth_middleware::Authenticated;
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{
-    AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData, NewDeath,
-    NewLootDrop, RenameGroupMember, SHARED_MEMBER,
+    AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData, MustBankItem,
+    NewDeath, NewLootDrop, PendingBankPing, RenameGroupMember, RequestBank, SetMemberDiscordId,
+    SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
 use actix_web::{delete, get, post, put, web, Error, HttpResponse};
@@ -209,6 +210,76 @@ pub async fn get_death_data(
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let death_data = db::get_death_data(&client, auth.group_id).await?;
     Ok(web::Json(death_data))
+}
+
+#[put("/member-discord-id")]
+pub async fn set_member_discord_id(
+    auth: Authenticated,
+    body: web::Json<SetMemberDiscordId>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::set_member_discord_id(
+        &client,
+        auth.group_id,
+        &body.member_name,
+        body.discord_id.as_deref(),
+    )
+    .await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[post("/must-bank-items")]
+pub async fn add_must_bank_item(
+    auth: Authenticated,
+    body: web::Json<MustBankItem>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::add_must_bank_item(&client, auth.group_id, body.item_id).await?;
+    Ok(HttpResponse::Created().finish())
+}
+
+#[delete("/must-bank-items")]
+pub async fn remove_must_bank_item(
+    auth: Authenticated,
+    body: web::Json<MustBankItem>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::remove_must_bank_item(&client, auth.group_id, body.item_id).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[get("/must-bank-items")]
+pub async fn get_must_bank_items(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<Vec<i32>>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let items = db::get_must_bank_items(&client, auth.group_id).await?;
+    Ok(web::Json(items))
+}
+
+#[post("/request-bank")]
+pub async fn request_bank(
+    auth: Authenticated,
+    body: web::Json<RequestBank>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::add_manual_bank_ping(&client, auth.group_id, &body.member_name, body.item_id).await?;
+    Ok(HttpResponse::Created().finish())
+}
+
+#[post("/poll-bank-pings")]
+pub async fn poll_bank_pings(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<Vec<PendingBankPing>>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let pings = db::poll_bank_pings(&client, auth.group_id).await?;
+    Ok(web::Json(pings))
 }
 
 #[get("/am-i-logged-in")]

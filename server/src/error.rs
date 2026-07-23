@@ -34,6 +34,14 @@ pub enum ApiError {
     AddDeathError(tokio_postgres::error::Error),
     #[from(ignore)]
     GetDeathDataError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    SetMemberDiscordIdError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    MustBankItemError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    RequestBankError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    PollBankPingsError(tokio_postgres::error::Error),
     GroupFullError,
     UreqError(ureq::Error),
     GroupMemberValidationError(String),
@@ -68,6 +76,12 @@ impl ResponseError for ApiError {
             ApiError::GetLootDataError(ref err) => handle_pg_error(err, "GetLootDataError"),
             ApiError::AddDeathError(ref err) => handle_pg_error(err, "AddDeathError"),
             ApiError::GetDeathDataError(ref err) => handle_pg_error(err, "GetDeathDataError"),
+            ApiError::SetMemberDiscordIdError(ref err) => {
+                handle_pg_error(err, "SetMemberDiscordIdError")
+            }
+            ApiError::MustBankItemError(ref err) => handle_pg_error(err, "MustBankItemError"),
+            ApiError::RequestBankError(ref err) => handle_pg_error(err, "RequestBankError"),
+            ApiError::PollBankPingsError(ref err) => handle_pg_error(err, "PollBankPingsError"),
             ApiError::DeleteGroupMemberError(ref err) => {
                 handle_pg_error(err, "DeleteGroupMemberError")
             }

@@ -67,6 +67,8 @@ pub struct GroupMember {
     pub collection_log_v2: Option<Vec<i32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_updated: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discord_id: Option<String>,
 }
 #[derive(Serialize)]
 pub struct AggregateSkillData {
@@ -123,6 +125,35 @@ pub struct MemberDeathData {
     pub deaths: Vec<DeathEntry>,
 }
 pub type GroupDeathData = Vec<MemberDeathData>;
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct SetMemberDiscordId {
+    pub member_name: String,
+    pub discord_id: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct MustBankItem {
+    pub item_id: i32,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct RequestBank {
+    pub member_name: String,
+    pub item_id: i32,
+}
+
+#[derive(Serialize)]
+pub struct PendingBankPing {
+    pub member_name: String,
+    pub discord_id: Option<String>,
+    pub item_id: i32,
+    pub reason: String,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateGroup {
