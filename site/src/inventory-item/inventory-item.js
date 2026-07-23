@@ -1,4 +1,6 @@
 import { BaseElement } from "../base-element/base-element";
+import { api } from "../data/api";
+import { mustBankItems } from "../data/must-bank-items";
 
 export class InventoryItem extends BaseElement {
   constructor() {
@@ -8,6 +10,7 @@ export class InventoryItem extends BaseElement {
   connectedCallback() {
     super.connectedCallback();
     const itemId = this.getAttribute("item-id");
+    this.itemId = parseInt(itemId);
     this.showIndividualItemPrices = this.hasAttribute("individual-prices");
     this.playerFilter = this.getAttribute("player-filter");
 
@@ -27,6 +30,8 @@ export class InventoryItem extends BaseElement {
       }, {});
       this.intersectionObserver.observe(this);
     }
+
+    this.subscribe("must-bank-items-updated", this.updateTagState.bind(this));
   }
 
   disconnectedCallback() {
@@ -65,6 +70,11 @@ export class InventoryItem extends BaseElement {
 <div class="inventory-item__quantity-bar"
      style="transform: scaleX(${quantityPercent}%); background: hsl(${quantityPercent}, 100%, 40%);">
 </div>
+${
+  quantity > 0
+    ? `<span class="inventory-item__request-button" data-player-name="${playerName}" title="Ask ${playerName} to bank this">📢</span>`
+    : "<span></span>"
+}
 `;
   }
 
@@ -72,6 +82,40 @@ export class InventoryItem extends BaseElement {
     this.item = item;
     this.render();
     this.classList.add("rendered");
+
+    this.tagButton = this.querySelector(".inventory-item__tag-button");
+    if (this.tagButton) {
+      this.eventListener(this.tagButton, "click", this.handleTagClick.bind(this));
+      this.updateTagState();
+    }
+
+    for (const button of this.querySelectorAll(".inventory-item__request-button")) {
+      this.eventListener(button, "click", this.handleRequestClick.bind(this));
+    }
+  }
+
+  updateTagState() {
+    if (this.tagButton) {
+      this.tagButton.classList.toggle("inventory-item__tag-button--tagged", mustBankItems.has(this.itemId));
+    }
+  }
+
+  async handleTagClick(event) {
+    event.stopPropagation();
+    if (mustBankItems.has(this.itemId)) {
+      await mustBankItems.untag(this.itemId);
+    } else {
+      await mustBankItems.tag(this.itemId);
+    }
+  }
+
+  async handleRequestClick(event) {
+    event.stopPropagation();
+    const button = event.currentTarget;
+    const playerName = button.dataset.playerName;
+    await api.requestBank(playerName, this.itemId);
+    button.classList.add("inventory-item__request-button--sent");
+    setTimeout(() => button.classList.remove("inventory-item__request-button--sent"), 2000);
   }
 
   get quantity() {

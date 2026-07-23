@@ -44,11 +44,36 @@ inventory-item.rendered {
 
 .inventory-item__bottom {
   display: grid;
-  grid-template-columns: 1fr 1fr 2fr;
+  grid-template-columns: 1fr 1fr 2fr auto;
   align-items: center;
   white-space: nowrap;
   grid-gap: 0 8px;
   padding: 8px;
+}
+
+.inventory-item__tag-button {
+  cursor: pointer;
+  margin-left: 6px;
+  opacity: 0.35;
+  filter: grayscale(100%);
+}
+
+.inventory-item__tag-button:hover,
+.inventory-item__tag-button--tagged {
+  opacity: 1;
+  filter: none;
+}
+
+.inventory-item__request-button {
+  cursor: pointer;
+  opacity: 0.35;
+  filter: grayscale(100%);
+}
+
+.inventory-item__request-button:hover,
+.inventory-item__request-button--sent {
+  opacity: 1;
+  filter: none;
 }
 
 .inventory-item__quantity-bar {
