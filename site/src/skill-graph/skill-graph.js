@@ -285,7 +285,7 @@ export class SkillGraph extends BaseElement {
   static datesForPeriod(period) {
     const normalizedPeriod = SkillGraph.normalizedPeriod(period);
     const stepCountsForPeriods = {
-      Day: 24,
+      Day: 96,
       Week: 7,
       Month: 30,
       Year: 12,
@@ -298,7 +298,7 @@ export class SkillGraph extends BaseElement {
       const t = new Date(now);
 
       if (normalizedPeriod === "Day") {
-        t.setTime(now.getTime() - i * 3600000);
+        t.setTime(now.getTime() - i * 900000);
         result.push(t);
         continue;
       }
@@ -318,11 +318,14 @@ export class SkillGraph extends BaseElement {
   static truncatedDateForPeriod(date, period) {
     const normalizedPeriod = SkillGraph.normalizedPeriod(period);
     const t = new Date(date);
-    t.setMinutes(0, 0, 0);
 
-    if (normalizedPeriod !== "Day") {
-      t.setHours(0);
+    if (normalizedPeriod === "Day") {
+      t.setMinutes(Math.floor(t.getMinutes() / 15) * 15, 0, 0);
+      return t;
     }
+
+    t.setMinutes(0, 0, 0);
+    t.setHours(0);
 
     if (normalizedPeriod === "Year") {
       t.setMonth(t.getMonth(), 1);

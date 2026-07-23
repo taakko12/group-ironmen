@@ -73,7 +73,7 @@ pub fn start_ge_updater() {
 
 pub fn start_skills_aggregator(db_pool: Pool) {
     task::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(1800));
+        let mut interval = time::interval(Duration::from_secs(300));
 
         loop {
             interval.tick().await;

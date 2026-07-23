@@ -376,10 +376,21 @@ async fn aggregate_skills_for_period(
     period: AggregatePeriod,
     last_aggregation: &DateTime<Utc>,
 ) -> Result<(), ApiError> {
+    // Day buckets in 15-minute increments (rather than a full hour) so the
+    // graph gets a new data point every ~5-20 minutes instead of only at the
+    // top of the hour -- otherwise a recently-active member can appear
+    // frozen for up to an hour.
+    let truncate_expr = match period {
+        AggregatePeriod::Day => {
+            "date_trunc('hour', skills_last_update) + INTERVAL '15 min' * FLOOR(EXTRACT(MINUTE FROM skills_last_update) / 15)"
+        }
+        AggregatePeriod::Month => "date_trunc('day', skills_last_update)",
+        AggregatePeriod::Year => "date_trunc('month', skills_last_update)",
+    };
     let s = format!(
         r#"
 INSERT INTO groupironman.skills_{} (member_id, time, skills)
-SELECT member_id, date_trunc('{}', skills_last_update), skills FROM groupironman.members
+SELECT member_id, {}, skills FROM groupironman.members
 WHERE skills_last_update IS NOT NULL AND skills IS NOT NULL AND skills_last_update >= $1
 ON CONFLICT (member_id, time)
 DO UPDATE SET skills=excluded.skills;
@@ -389,11 +400,7 @@ DO UPDATE SET skills=excluded.skills;
             AggregatePeriod::Month => "month",
             AggregatePeriod::Year => "year",
         },
-        match period {
-            AggregatePeriod::Day => "hour",
-            AggregatePeriod::Month => "day",
-            AggregatePeriod::Year => "month",
-        }
+        truncate_expr
     );
     let aggregate_stmt = transaction.prepare_cached(&s).await?;
     transaction
