@@ -20,9 +20,17 @@ static GLOBAL: MiMalloc = MiMalloc;
 /// require SSL; local/docker-compose Postgres without SSL still works because
 /// tokio-postgres defaults to sslmode=prefer and falls back to plaintext when
 /// the server declines the SSL request.
+/// Supabase's Postgres/pooler certs are signed by their own private CA, which
+/// isn't in any public trust store, so it has to be pinned explicitly.
+const SUPABASE_CA_PEM: &[u8] = include_bytes!("supabase-ca.pem");
+
 fn tls_connector() -> MakeRustlsConnect {
     let mut root_store = rustls::RootCertStore::empty();
     for cert in rustls_native_certs::load_native_certs().certs {
+        let _ = root_store.add(cert);
+    }
+    let mut supabase_ca_reader = std::io::BufReader::new(SUPABASE_CA_PEM);
+    for cert in rustls_pemfile::certs(&mut supabase_ca_reader).flatten() {
         let _ = root_store.add(cert);
     }
     let tls_config = rustls::ClientConfig::builder()

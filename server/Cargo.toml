@@ -29,6 +29,7 @@ futures-util = "0.3.31"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"] }
 rustls-native-certs = "0.8"
+rustls-pemfile = "2.2"
 
 [profile.dev]
 opt-level = 0
