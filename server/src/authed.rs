@@ -4,9 +4,10 @@ use crate::error::ApiError;
 use crate::models::{
     AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData, MustBankItem,
     NameChange, NewDeath, NewLootDrop, PendingBankPing, RenameGroupMember, RequestBank,
-    SetMemberDiscordId, SHARED_MEMBER,
+    SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
+use crate::wom;
 use actix_web::{delete, get, post, put, web, Error, HttpResponse};
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Pool};
@@ -168,6 +169,25 @@ pub async fn get_skill_data(
     let group_skill_data =
         db::get_skills_for_period(&client, auth.group_id, aggregate_period).await?;
     Ok(web::Json(group_skill_data))
+}
+
+#[get("/wom-gains")]
+pub async fn get_wom_gains(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<HashMap<String, WomPlayerGains>>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let member_names = db::get_group_member_names(&client, auth.group_id).await?;
+
+    let cache = wom::get_cached_wom_gains();
+    let mut result = HashMap::new();
+    for member_name in member_names {
+        if let Some(gains) = cache.get(&member_name) {
+            result.insert(member_name, gains.clone());
+        }
+    }
+
+    Ok(web::Json(result))
 }
 
 #[post("/name-changes")]

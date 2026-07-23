@@ -5,6 +5,7 @@ use server::db;
 use server::models;
 use server::unauthed;
 use server::update_batcher;
+use server::wom;
 
 use actix_cors::Cors;
 use actix_web::{http::header, middleware, web, App, HttpServer};
@@ -56,6 +57,7 @@ async fn main() -> std::io::Result<()> {
 
     unauthed::start_ge_updater();
     unauthed::start_skills_aggregator(pool.clone());
+    wom::start_wom_updater(pool.clone());
 
     let update_batcher_pool = config.pg.create_pool(None, tls_connector()).unwrap();
     let (tx, rx) = mpsc::channel::<models::GroupMember>(10000);
@@ -90,6 +92,7 @@ async fn main() -> std::io::Result<()> {
             .service(authed::request_bank)
             .service(authed::poll_bank_pings)
             .service(authed::add_name_change)
+            .service(authed::get_wom_gains)
             .service(authed::get_collection_log);
         let json_config = web::JsonConfig::default().limit(100000);
         let cors = Cors::default()

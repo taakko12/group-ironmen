@@ -211,3 +211,9 @@ pub struct CaptchaVerifyResponse {
     // #[serde(rename = "error-codes", default)]
     // pub error_codes: std::vec::Vec<String>,
 }
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct WomPlayerGains {
+    pub xp_gained: i64,
+    pub kills_gained: i64,
+}

@@ -39,6 +39,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/request-bank`;
   }
 
+  get womGainsUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/wom-gains`;
+  }
+
   get amILoggedInUrl() {
     return `${this.baseUrl}/group/${this.groupName}/am-i-logged-in`;
   }
@@ -292,6 +296,15 @@ class Api {
     });
 
     return response;
+  }
+
+  async getWomGains() {
+    const response = await fetch(this.womGainsUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
   }
 }
 

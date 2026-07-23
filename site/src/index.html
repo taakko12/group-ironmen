@@ -81,11 +81,16 @@
 
     <app-route
       route-path="/"
+      route-component="dashboard-page"
+      route-outlet=".authed-section__outlet"
+      route-wrapper=".authed-section"
+    ></app-route>
+    <app-route
+      route-path="/items"
       route-component="items-page"
       route-outlet=".authed-section__outlet"
       route-wrapper=".authed-section"
     ></app-route>
-    <app-route route-path="/items" alias-for="/" route-wrapper=".authed-section"></app-route>
     <app-route
       route-path="/map"
       route-component="map-page"

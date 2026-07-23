@@ -779,6 +779,24 @@ pub async fn remove_must_bank_item(
     Ok(())
 }
 
+pub async fn get_group_member_names(
+    client: &Client,
+    group_id: i64,
+) -> Result<Vec<String>, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            "SELECT member_name FROM groupironman.members WHERE group_id=$1 AND member_name != $2",
+        )
+        .await?;
+    let rows = client.query(&stmt, &[&group_id, &SHARED_MEMBER]).await?;
+
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        result.push(row.try_get(0)?);
+    }
+    Ok(result)
+}
+
 pub async fn get_must_bank_items(client: &Client, group_id: i64) -> Result<Vec<i32>, ApiError> {
     let stmt = client
         .prepare_cached("SELECT item_id FROM groupironman.must_bank_items WHERE group_id=$1")
