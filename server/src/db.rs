@@ -872,10 +872,11 @@ fn decode_item_ids(raw: &Option<Vec<i32>>) -> HashSet<i32> {
     ids
 }
 
-// Deliberately much longer than the frontend's 5-minute "inactive" indicator
-// threshold (site/src/data/member-data.js) -- that's just a UI dimming cue,
-// while this gates an actual Discord ping, so it needs enough slack that a
-// loading screen or brief alt-tab doesn't trigger a false alarm.
+// Both thresholds measure the same thing (time since last_updated), so this
+// is effectively 20 extra minutes on top of the frontend's 20-minute
+// "inactive" indicator (site/src/data/member-data.js, which itself matches
+// OSRS's max AFK auto-logout timer) -- worst case, someone who walks away
+// mid-session gets pinged 40 minutes after their last activity.
 const INACTIVE_THRESHOLD_MINUTES: i64 = 40;
 const BANK_PING_COOLDOWN_HOURS: i64 = 6;
 

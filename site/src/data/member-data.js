@@ -113,7 +113,10 @@ export class MemberData {
       const timeSinceLastUpdated = utility.timeSinceLastUpdate(memberData.last_updated);
       let wasInactive = this.inactive;
 
-      this.inactive = !isNaN(timeSinceLastUpdated) && timeSinceLastUpdated > 300 * 1000;
+      // 20 minutes matches OSRS's max AFK auto-logout timer, so this only
+      // flips once the client has plausibly actually logged out rather than
+      // just being briefly idle.
+      this.inactive = !isNaN(timeSinceLastUpdated) && timeSinceLastUpdated > 20 * 60 * 1000;
 
       if (!wasInactive && this.inactive) {
         this.publishUpdate("inactive");
