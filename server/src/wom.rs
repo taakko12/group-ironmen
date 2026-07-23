@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use crate::models::{WomPlayerGains, SHARED_MEMBER};
+use crate::models::{WomBossGainEntry, WomPlayerGains, WomSkillGainEntry, SHARED_MEMBER};
 use arc_swap::{ArcSwap, ArcSwapAny};
 use deadpool_postgres::Pool;
 use serde::Deserialize;
@@ -105,12 +105,38 @@ async fn fetch_player_gains(rsn: &str, period: &str) -> Result<WomPlayerGains, A
         .max_by_key(|(_, gained)| gained.kills.gained)
         .filter(|(_, gained)| gained.kills.gained > 0);
 
+    let mut skills_gained: Vec<WomSkillGainEntry> = response
+        .data
+        .skills
+        .iter()
+        .filter(|(name, gained)| name.as_str() != "overall" && gained.experience.gained > 0)
+        .map(|(name, gained)| WomSkillGainEntry {
+            name: display_name(name),
+            xp: gained.experience.gained,
+        })
+        .collect();
+    skills_gained.sort_by_key(|s| std::cmp::Reverse(s.xp));
+
+    let mut bosses_gained: Vec<WomBossGainEntry> = response
+        .data
+        .bosses
+        .iter()
+        .filter(|(_, gained)| gained.kills.gained > 0)
+        .map(|(name, gained)| WomBossGainEntry {
+            name: display_name(name),
+            kills: gained.kills.gained,
+        })
+        .collect();
+    bosses_gained.sort_by_key(|b| std::cmp::Reverse(b.kills));
+
     Ok(WomPlayerGains {
         xp_gained,
         top_skill_name: top_skill.map(|(name, _)| display_name(name)),
         top_skill_xp: top_skill.map(|(_, gained)| gained.experience.gained),
         top_boss_name: top_boss.map(|(name, _)| display_name(name)),
         top_boss_kills: top_boss.map(|(_, gained)| gained.kills.gained),
+        skills_gained,
+        bosses_gained,
     })
 }
 

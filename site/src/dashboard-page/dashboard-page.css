@@ -4,7 +4,44 @@ dashboard-page {
 
 .dashboard-page__control-container {
   display: flex;
+  align-items: stretch;
+  gap: 8px;
   overflow-x: auto;
+}
+
+.dashboard-page__wom-link {
+  font-size: 20px;
+  font-family: "rssmall";
+  color: var(--orange);
+  text-shadow: 1px 1px var(--black);
+  padding: 4px 8px;
+  font-weight: 400;
+  box-sizing: border-box;
+  line-height: 1em;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+
+  border-image: url(/ui/border-button.png) 9 9 / 9px stretch;
+  border-style: solid;
+  border-radius: 4px;
+  background: #4d4336;
+}
+
+.dashboard-page__wom-link:hover {
+  background: rgb(66, 55, 38);
+}
+
+.dark-mode .dashboard-page__wom-link {
+  border-image: url(/ui/border-button-dark.png) 9 9 / 9px stretch;
+  background: #282828;
+}
+
+.dark-mode .dashboard-page__wom-link:hover {
+  background: #383838;
 }
 
 .dashboard-page__cards {
