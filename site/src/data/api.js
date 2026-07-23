@@ -27,6 +27,18 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/rename-group-member`;
   }
 
+  get memberDiscordIdUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/member-discord-id`;
+  }
+
+  get mustBankItemsUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/must-bank-items`;
+  }
+
+  get requestBankUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/request-bank`;
+  }
+
   get amILoggedInUrl() {
     return `${this.baseUrl}/group/${this.groupName}/am-i-logged-in`;
   }
@@ -171,6 +183,19 @@ class Api {
     return response;
   }
 
+  async setMemberDiscordId(memberName, discordId) {
+    const response = await fetch(this.memberDiscordIdUrl, {
+      body: JSON.stringify({ member_name: memberName, discord_id: discordId || null }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "PUT",
+    });
+
+    return response;
+  }
+
   async amILoggedIn() {
     const response = await fetch(this.amILoggedInUrl, {
       headers: { Authorization: this.groupToken },
@@ -219,6 +244,54 @@ class Api {
       },
     });
     return response.json();
+  }
+
+  async getMustBankItems() {
+    const response = await fetch(this.mustBankItemsUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
+  }
+
+  async tagMustBankItem(itemId) {
+    const response = await fetch(this.mustBankItemsUrl, {
+      body: JSON.stringify({ item_id: itemId }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "POST",
+    });
+
+    return response;
+  }
+
+  async untagMustBankItem(itemId) {
+    const response = await fetch(this.mustBankItemsUrl, {
+      body: JSON.stringify({ item_id: itemId }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "DELETE",
+    });
+
+    return response;
+  }
+
+  async requestBank(memberName, itemId) {
+    const response = await fetch(this.requestBankUrl, {
+      body: JSON.stringify({ member_name: memberName, item_id: itemId }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "POST",
+    });
+
+    return response;
   }
 }
 

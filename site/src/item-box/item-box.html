@@ -11,4 +11,8 @@
     pouch-name="${this.item.name}">
   </rune-pouch>
   ` : ""}
+  ${!this.noTooltip && this.itemId > 0 ? `
+  <span class="item-box__tag-button" title="Toggle 'must bank' tag">🔖</span>
+  ${this.playerName ? `<span class="item-box__request-button" title="Ask ${this.playerName} to bank this">📢</span>` : ""}
+  ` : ""}
 </div>

@@ -18,10 +18,12 @@ export class EditMember extends BaseElement {
     this.render();
 
     this.input = this.querySelector("member-name-input");
+    this.discordIdInput = this.querySelector(".edit-member__discord-id");
     this.error = this.querySelector(".edit-member__error");
     const renameButton = this.querySelector(".edit-member__rename");
     const removeButton = this.querySelector(".edit-member__remove");
     const addButton = this.querySelector(".edit-member__add");
+    const saveDiscordIdButton = this.querySelector(".edit-member__save-discord-id");
 
     if (renameButton) {
       this.eventListener(renameButton, "click", this.renameMember.bind(this));
@@ -31,6 +33,9 @@ export class EditMember extends BaseElement {
     }
     if (addButton) {
       this.eventListener(addButton, "click", this.addMember.bind(this));
+    }
+    if (saveDiscordIdButton) {
+      this.eventListener(saveDiscordIdButton, "click", this.saveDiscordId.bind(this));
     }
   }
 
@@ -98,6 +103,27 @@ export class EditMember extends BaseElement {
       },
       noCallback: () => {},
     });
+  }
+
+  async saveDiscordId() {
+    this.hideError();
+    const discordId = this.discordIdInput.value;
+
+    try {
+      loadingScreenManager.showLoadingScreen();
+      const result = await api.setMemberDiscordId(this.member.name, discordId);
+      if (result.ok) {
+        await api.restart();
+        await pubsub.waitUntilNextEvent("get-group-data", false);
+      } else {
+        const message = await result.text();
+        this.showError(`Failed to save Discord ID ${message}`);
+      }
+    } catch (error) {
+      this.showError(`Failed to save Discord ID ${error}`);
+    } finally {
+      loadingScreenManager.hideLoadingScreen();
+    }
   }
 
   async addMember() {

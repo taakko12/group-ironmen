@@ -128,6 +128,10 @@ export class MemberData {
       updatedAttributes.add("coordinates");
     }
 
+    if (memberData.discord_id) {
+      this.discordId = memberData.discord_id;
+    }
+
     if (memberData.skills) {
       const previousSkills = this.skills;
       this.skills = Skill.parseSkillData(memberData.skills);

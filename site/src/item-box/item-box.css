@@ -33,3 +33,40 @@ item-box {
   font-size: 16px;
   font-family: "rstiny";
 }
+
+.item-box__tag-button,
+.item-box__request-button {
+  position: absolute;
+  z-index: 2;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.25;
+  filter: grayscale(100%);
+}
+
+.item-box__tag-button:hover,
+.item-box__request-button:hover {
+  opacity: 1;
+  filter: none;
+}
+
+.item-box__tag-button {
+  top: 1px;
+  right: 1px;
+}
+
+.item-box__tag-button--tagged {
+  opacity: 1;
+  filter: none;
+}
+
+.item-box__request-button {
+  bottom: 1px;
+  right: 1px;
+}
+
+.item-box__request-button--sent {
+  opacity: 1;
+  filter: none;
+}

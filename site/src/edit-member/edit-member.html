@@ -1,9 +1,14 @@
 <member-name-input input-value="${this.member?.name || ''}" member-number="${this.memberNumber}"></member-name-input>
 
+${this.member ? `
+<men-input class="edit-member__discord-id" input-value="${this.member?.discordId || ''}" placeholder-text="Discord ID" input-label="Discord ID" max-length="32"></men-input>
+` : ''}
+
 <div class="edit-member__buttons">
   ${this.member ? `
   <button class="edit-member__rename men-button small">Rename</button>
   <button class="edit-member__remove men-button small">Remove</button>
+  <button class="edit-member__save-discord-id men-button small">Save Discord ID</button>
   ` : `
   <button class="edit-member__add men-button small">Add member</button>
   ` }
