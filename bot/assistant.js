@@ -4,7 +4,9 @@
 // model decides which backend data to pull before answering, rather than
 // needing a hand-built slash command for every possible question.
 
-const { SYSTEM_PROMPT } = require('./personality');
+// generateBankPingLine is really just "restyle this factual context in the
+// bot's voice" -- reused here under a clearer name for that purpose.
+const { generateBankPingLine: toInCharacterLine } = require('./personality');
 const { getLootData, getDeathData, getGroupMembers, getWomGains } = require('./backendClient');
 const { buildLootLeaderboard, buildDeathLeaderboard } = require('./leaderboard');
 const { getDryStreak } = require('./dryStreak');
@@ -13,6 +15,14 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const MAX_TOOL_ROUNDS = 4;
 const SHARED_MEMBER_NAME = '@SHARED';
+
+// Deliberately neutral -- mixing the full in-character SYSTEM_PROMPT into
+// the same call as tool definitions made the model unstable about emitting
+// well-formed tool calls (it started replying with its own text-based
+// function-call syntax instead of Groq's structured format, which Groq then
+// rejects with a tool_use_failed error). Tool selection stays plain; the
+// personality voice gets layered on afterward as a separate restyle pass.
+const TOOL_SYSTEM_PROMPT = `You are a data assistant for an OSRS group ironman Discord bot. Call tools to look up real data before answering questions about loot, deaths, skill/boss gains, or dry streaks -- never guess at numbers. Once you have what you need, answer in one short, plain, factual sentence or two. No personality or jokes needed here -- just the facts.`;
 
 const tools = [
   {
@@ -127,7 +137,7 @@ async function resolveMentionsToNames(message) {
   return content;
 }
 
-async function callGroqWithTools(messages) {
+async function callGroqWithTools(messages, { allowTools = true } = {}) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -137,34 +147,48 @@ async function callGroqWithTools(messages) {
     body: JSON.stringify({
       model: GROQ_MODEL,
       messages,
-      tools,
-      tool_choice: 'auto',
+      ...(allowTools ? { tools, tool_choice: 'auto' } : {}),
       max_tokens: 400,
       temperature: 0.7,
     }),
   });
+
   if (!response.ok) {
-    throw new Error(`Groq API returned ${response.status}: ${await response.text()}`);
+    const bodyText = await response.text();
+    // The model occasionally emits its own text-based function-call syntax
+    // instead of Groq's structured tool_calls format, which Groq rejects
+    // with this error -- retry once with tools disabled so the question
+    // still gets a plain answer instead of silently failing outright.
+    let code = null;
+    try {
+      code = JSON.parse(bodyText)?.error?.code;
+    } catch {
+      // not JSON -- fall through to the generic error below
+    }
+    if (code === 'tool_use_failed' && allowTools) {
+      return callGroqWithTools(messages, { allowTools: false });
+    }
+    throw new Error(`Groq API returned ${response.status}: ${bodyText}`);
   }
+
   return response.json();
 }
 
 async function answerQuestion(question) {
   const messages = [
-    {
-      role: 'system',
-      content: `${SYSTEM_PROMPT}\n\nYou can call tools to look up real group data before answering questions about loot, deaths, skill/boss gains, or dry streaks -- always use a tool for those instead of guessing. Once you have what you need, answer in a single short conversational reply.`,
-    },
+    { role: 'system', content: TOOL_SYSTEM_PROMPT },
     { role: 'user', content: question },
   ];
 
+  let factualAnswer = null;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const data = await callGroqWithTools(messages);
     const choice = data.choices?.[0]?.message;
-    if (!choice) return null;
+    if (!choice) break;
 
     if (!choice.tool_calls || choice.tool_calls.length === 0) {
-      return choice.content ? choice.content.trim() : null;
+      factualAnswer = choice.content ? choice.content.trim() : null;
+      break;
     }
 
     messages.push(choice);
@@ -185,7 +209,14 @@ async function answerQuestion(question) {
     }
   }
 
-  return "That took too many steps to figure out -- try asking something more specific.";
+  if (!factualAnswer) {
+    factualAnswer = "That took too many steps to figure out -- try asking something more specific.";
+  }
+
+  // Restyle the plain factual answer in the bot's own voice; if that call
+  // fails for any reason, the factual answer alone is still a fine reply.
+  const inCharacter = await toInCharacterLine(`Answer this question in character: "${question}"\n\nThe real answer is: ${factualAnswer}`);
+  return inCharacter ?? factualAnswer;
 }
 
 async function handleMention(message) {
