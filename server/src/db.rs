@@ -314,7 +314,7 @@ pub async fn get_group_data(
     let stmt = client
         .prepare_cached(
             r#"
-SELECT member_name, discord_id,
+SELECT member_name, discord_id, color,
 GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
 quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
 rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
@@ -349,6 +349,7 @@ FROM groupironman.members WHERE group_id=$2
             name: member_name,
             last_updated,
             discord_id: row.try_get("discord_id").ok(),
+            color: row.try_get("color").ok(),
             stats: row.try_get("stats").ok(),
             coordinates: row.try_get("coordinates").ok(),
             skills: row.try_get("skills").ok(),
@@ -1043,6 +1044,33 @@ pub async fn set_member_discord_id(
         .execute(&stmt, &[&discord_id, &member_id])
         .await
         .map_err(ApiError::SetMemberDiscordIdError)?;
+
+    Ok(())
+}
+
+pub async fn set_member_color(
+    client: &Client,
+    group_id: i64,
+    member_name: &str,
+    color: Option<&str>,
+) -> Result<(), ApiError> {
+    let member_id = match try_get_member_id(client, group_id, member_name).await? {
+        Some(member_id) => member_id,
+        None => {
+            return Err(ApiError::GroupMemberValidationError(format!(
+                "No member named '{}' in this group",
+                member_name
+            )))
+        }
+    };
+
+    let stmt = client
+        .prepare_cached("UPDATE groupironman.members SET color=$1 WHERE member_id=$2")
+        .await?;
+    client
+        .execute(&stmt, &[&color, &member_id])
+        .await
+        .map_err(ApiError::SetMemberColorError)?;
 
     Ok(())
 }
@@ -2056,6 +2084,21 @@ CREATE INDEX IF NOT EXISTS storage_log_member_time_idx ON groupironman.storage_l
             .await?;
 
         commit_migration(&transaction, "create_storage_log_table").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "add_member_color_column").await? {
+        let transaction = client.transaction().await?;
+        transaction
+            .execute(
+                r#"
+ALTER TABLE groupironman.members ADD COLUMN IF NOT EXISTS color TEXT;
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "add_member_color_column").await?;
         transaction.commit().await?;
     }
 

@@ -74,6 +74,12 @@ pub fn valid_name(name: &str) -> bool {
     (1..=16).contains(&len) && name.is_ascii() && !NAME_RE.is_match(name) && !name.trim().is_empty()
 }
 
+static HEX_COLOR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new("^#[0-9a-fA-F]{6}$").unwrap());
+
+pub fn valid_hex_color(color: &str) -> bool {
+    HEX_COLOR_RE.is_match(color)
+}
+
 pub fn validate_member_prop_length<T>(
     prop_name: &str,
     value: &Option<Vec<T>>,

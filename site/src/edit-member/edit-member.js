@@ -19,11 +19,13 @@ export class EditMember extends BaseElement {
 
     this.input = this.querySelector("member-name-input");
     this.discordIdInput = this.querySelector(".edit-member__discord-id");
+    this.colorInput = this.querySelector(".edit-member__color");
     this.error = this.querySelector(".edit-member__error");
     const renameButton = this.querySelector(".edit-member__rename");
     const removeButton = this.querySelector(".edit-member__remove");
     const addButton = this.querySelector(".edit-member__add");
     const saveDiscordIdButton = this.querySelector(".edit-member__save-discord-id");
+    const saveColorButton = this.querySelector(".edit-member__save-color");
 
     if (renameButton) {
       this.eventListener(renameButton, "click", this.renameMember.bind(this));
@@ -36,6 +38,9 @@ export class EditMember extends BaseElement {
     }
     if (saveDiscordIdButton) {
       this.eventListener(saveDiscordIdButton, "click", this.saveDiscordId.bind(this));
+    }
+    if (saveColorButton) {
+      this.eventListener(saveColorButton, "click", this.saveColor.bind(this));
     }
   }
 
@@ -121,6 +126,27 @@ export class EditMember extends BaseElement {
       }
     } catch (error) {
       this.showError(`Failed to save Discord ID ${error}`);
+    } finally {
+      loadingScreenManager.hideLoadingScreen();
+    }
+  }
+
+  async saveColor() {
+    this.hideError();
+    const color = this.colorInput.value;
+
+    try {
+      loadingScreenManager.showLoadingScreen();
+      const result = await api.setMemberColor(this.member.name, color);
+      if (result.ok) {
+        await api.restart();
+        await pubsub.waitUntilNextEvent("get-group-data", false);
+      } else {
+        const message = await result.text();
+        this.showError(`Failed to save color ${message}`);
+      }
+    } catch (error) {
+      this.showError(`Failed to save color ${error}`);
     } finally {
       loadingScreenManager.hideLoadingScreen();
     }

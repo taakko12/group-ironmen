@@ -5,9 +5,9 @@ use crate::models::{
     AmIInGroupRequest, GroupBankPingData, GroupDeathData, GroupLootData, GroupMember,
     GroupSkillData, GroupStorageLog, MustBankItem, NameChange, NewDeath, NewLootDrop,
     NewStorageLogEntry, PendingBankPing, RecentBankPings, RenameGroupMember, RequestBank,
-    RequestBankBatch, SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
+    RequestBankBatch, SetMemberColor, SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
 };
-use crate::validators::{valid_name, validate_member_prop_length};
+use crate::validators::{valid_hex_color, valid_name, validate_member_prop_length};
 use crate::wom;
 use actix_web::{delete, get, post, put, web, Error, HttpResponse};
 use chrono::{DateTime, Utc};
@@ -310,6 +310,23 @@ pub async fn set_member_discord_id(
         body.discord_id.as_deref(),
     )
     .await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[put("/member-color")]
+pub async fn set_member_color(
+    auth: Authenticated,
+    body: web::Json<SetMemberColor>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    if let Some(color) = &body.color {
+        if !valid_hex_color(color) {
+            return Ok(HttpResponse::BadRequest().body("color must be a hex value like #a1b2c3"));
+        }
+    }
+
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::set_member_color(&client, auth.group_id, &body.member_name, body.color.as_deref()).await?;
     Ok(HttpResponse::Ok().finish())
 }
 

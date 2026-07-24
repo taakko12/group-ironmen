@@ -37,6 +37,8 @@ pub enum ApiError {
     #[from(ignore)]
     SetMemberDiscordIdError(tokio_postgres::error::Error),
     #[from(ignore)]
+    SetMemberColorError(tokio_postgres::error::Error),
+    #[from(ignore)]
     MustBankItemError(tokio_postgres::error::Error),
     #[from(ignore)]
     RequestBankError(tokio_postgres::error::Error),
@@ -87,6 +89,7 @@ impl ResponseError for ApiError {
             ApiError::SetMemberDiscordIdError(ref err) => {
                 handle_pg_error(err, "SetMemberDiscordIdError")
             }
+            ApiError::SetMemberColorError(ref err) => handle_pg_error(err, "SetMemberColorError"),
             ApiError::MustBankItemError(ref err) => handle_pg_error(err, "MustBankItemError"),
             ApiError::RequestBankError(ref err) => handle_pg_error(err, "RequestBankError"),
             ApiError::PollBankPingsError(ref err) => handle_pg_error(err, "PollBankPingsError"),

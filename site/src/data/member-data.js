@@ -14,6 +14,35 @@ const playerColors = [
 ];
 let currentColor = 0;
 
+// player-icon renders its icon through a CSS hue-rotate(Xdeg) filter over a
+// grayscale-ish base image, so it needs a plain numeric hue regardless of
+// whether the color came from the round-robin hsl() palette above or a
+// user-picked hex color from the settings page.
+function hueFromColor(color) {
+  if (!color.startsWith("#")) {
+    return color.substring(color.indexOf("(") + 1, color.indexOf(","));
+  }
+
+  const r = parseInt(color.slice(1, 3), 16) / 255;
+  const g = parseInt(color.slice(3, 5), 16) / 255;
+  const b = parseInt(color.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+
+  const delta = max - min;
+  let hue;
+  if (max === r) {
+    hue = ((g - b) / delta) % 6;
+  } else if (max === g) {
+    hue = (b - r) / delta + 2;
+  } else {
+    hue = (r - g) / delta + 4;
+  }
+  hue = Math.round(hue * 60);
+  return hue < 0 ? hue + 360 : hue;
+}
+
 export const memberInventoryFields = ["bank", "inventory", "equipment", "runePouch", "seedVault"];
 
 const parsedFieldMappings = [
@@ -98,7 +127,7 @@ export class MemberData {
     this.color = playerColors[currentColor];
     currentColor = (currentColor + 1) % playerColors.length;
     // Store the hue for player-icon
-    this.hue = this.color.substring(this.color.indexOf("(") + 1, this.color.indexOf(","));
+    this.hue = hueFromColor(this.color);
   }
 
   update(memberData) {
@@ -133,6 +162,11 @@ export class MemberData {
 
     if (memberData.discord_id) {
       this.discordId = memberData.discord_id;
+    }
+
+    if (memberData.color) {
+      this.color = memberData.color;
+      this.hue = hueFromColor(this.color);
     }
 
     if (memberData.skills) {

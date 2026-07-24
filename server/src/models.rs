@@ -69,6 +69,8 @@ pub struct GroupMember {
     pub last_updated: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discord_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 #[derive(Serialize)]
 pub struct AggregateSkillData {
@@ -194,6 +196,13 @@ pub type GroupStorageLog = Vec<StorageLogEntry>;
 pub struct SetMemberDiscordId {
     pub member_name: String,
     pub discord_id: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct SetMemberColor {
+    pub member_name: String,
+    pub color: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]

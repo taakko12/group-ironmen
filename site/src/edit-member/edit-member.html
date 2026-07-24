@@ -2,6 +2,10 @@
 
 ${this.member ? `
 <men-input class="edit-member__discord-id" input-value="${this.member?.discordId || ''}" placeholder-text="Discord ID" input-label="Discord ID" max-length="32"></men-input>
+<label class="edit-member__color-label">
+  Color
+  <input type="color" class="edit-member__color" value="${this.member?.color?.startsWith('#') ? this.member.color : '#ffffff'}">
+</label>
 ` : ''}
 
 <div class="edit-member__buttons">
@@ -9,6 +13,7 @@ ${this.member ? `
   <button class="edit-member__rename men-button small">Rename</button>
   <button class="edit-member__remove men-button small">Remove</button>
   <button class="edit-member__save-discord-id men-button small">Save Discord ID</button>
+  <button class="edit-member__save-color men-button small">Save Color</button>
   ` : `
   <button class="edit-member__add men-button small">Add member</button>
   ` }

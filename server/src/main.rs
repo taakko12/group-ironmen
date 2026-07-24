@@ -88,6 +88,7 @@ async fn main() -> std::io::Result<()> {
             .service(authed::add_storage_log_entry)
             .service(authed::get_storage_log)
             .service(authed::set_member_discord_id)
+            .service(authed::set_member_color)
             .service(authed::add_must_bank_item)
             .service(authed::remove_must_bank_item)
             .service(authed::get_must_bank_items)

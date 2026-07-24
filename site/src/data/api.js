@@ -31,6 +31,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/member-discord-id`;
   }
 
+  get memberColorUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/member-color`;
+  }
+
   get mustBankItemsUrl() {
     return `${this.baseUrl}/group/${this.groupName}/must-bank-items`;
   }
@@ -202,6 +206,19 @@ class Api {
   async setMemberDiscordId(memberName, discordId) {
     const response = await fetch(this.memberDiscordIdUrl, {
       body: JSON.stringify({ member_name: memberName, discord_id: discordId || null }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "PUT",
+    });
+
+    return response;
+  }
+
+  async setMemberColor(memberName, color) {
+    const response = await fetch(this.memberColorUrl, {
+      body: JSON.stringify({ member_name: memberName, color: color || null }),
       headers: {
         "Content-Type": "application/json",
         Authorization: this.groupToken,
