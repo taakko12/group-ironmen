@@ -139,10 +139,12 @@ export class ToastNotifications extends BaseElement {
   }
 
   showLootToast(memberName, drop) {
-    const imageUrl = drop.image_url || drop.screenshot_url;
     this.addToast({
       type: "loot",
-      icon: imageUrl,
+      // Prefer the real gameplay screenshot over the item's wiki sprite,
+      // rendered bigger as a banner rather than a small icon.
+      screenshot: drop.screenshot_url,
+      icon: drop.screenshot_url ? null : drop.image_url,
       title: `${memberName} received a drop!`,
       body: `${drop.item_name} (${drop.gp_value.toLocaleString()} gp)`,
       link: drop.message_link,
@@ -152,7 +154,7 @@ export class ToastNotifications extends BaseElement {
   showDeathToast(memberName, death) {
     this.addToast({
       type: "death",
-      icon: death.image_url,
+      screenshot: death.image_url,
       title: `${memberName} has died!`,
       body: new Date(death.time).toLocaleString(),
       link: death.message_link,
@@ -185,12 +187,14 @@ export class ToastNotifications extends BaseElement {
     });
   }
 
-  addToast({ type, icon, title, body, link }) {
-    const iconHtml = icon
+  addToast({ type, icon, screenshot, title, body, link }) {
+    const mediaHtml = screenshot
+      ? `<img class="toast-notifications__screenshot" src="${screenshot}" loading="lazy" onerror="this.remove()" />`
+      : icon
       ? `<img class="toast-notifications__icon" src="${icon}" loading="lazy" onerror="this.remove()" />`
       : "";
     const linkContent = `
-${iconHtml}
+${mediaHtml}
 <div class="toast-notifications__text">
   <div class="toast-notifications__title">${title}</div>
   <div class="toast-notifications__body">${body}</div>

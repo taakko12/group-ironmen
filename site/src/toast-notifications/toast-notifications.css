@@ -4,34 +4,39 @@ toast-notifications {
 
 .toast-notifications__container {
   position: fixed;
-  top: 12px;
+  top: 25%;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: min(360px, calc(100vw - 24px));
+  align-items: center;
+  gap: 10px;
+  width: min(280px, calc(100vw - 24px));
   pointer-events: none;
 }
 
 .toast-notifications__toast {
   box-sizing: border-box;
-  padding: 8px 10px;
-  border-radius: 4px;
-  border-left: 3px solid var(--orange);
+  width: 100%;
+  padding: 20px 18px;
+  border-radius: 6px;
+  border-left: 4px solid var(--orange);
   pointer-events: auto;
   opacity: 0;
-  transform: translateY(-12px);
+  transform: translateY(-12px) scale(0.96);
   transition: opacity 0.25s ease, transform 0.25s ease;
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  text-align: center;
+  gap: 8px;
 }
 
 .toast-notifications__toast--visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 .toast-notifications__toast--death {
@@ -57,34 +62,40 @@ toast-notifications {
 
 .toast-notifications__link {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
+  gap: 10px;
+  width: 100%;
   color: var(--primary-text);
   text-decoration: none;
 }
 
 .toast-notifications__icon {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   flex-shrink: 0;
   image-rendering: pixelated;
 }
 
+.toast-notifications__screenshot {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
 .toast-notifications__text {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 
 .toast-notifications__title {
-  font-size: 0.95em;
+  font-size: 1.15em;
   font-weight: 600;
   color: var(--orange);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .toast-notifications__toast--death .toast-notifications__title {
@@ -93,7 +104,7 @@ toast-notifications {
 
 .toast-notifications__toast--bank .toast-notifications__title {
   color: #8fb3d9;
-  font-size: 0.88em;
+  font-size: 1.02em;
 }
 
 .toast-notifications__toast--storage-deposit .toast-notifications__title {
@@ -105,20 +116,22 @@ toast-notifications {
 }
 
 .toast-notifications__body {
-  font-size: 0.85em;
-  opacity: 0.8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 1em;
+  opacity: 0.85;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .toast-notifications__dismiss {
+  position: absolute;
+  top: 6px;
+  right: 8px;
   background: none;
   border: none;
   color: var(--primary-text);
   opacity: 0.5;
   cursor: pointer;
-  font-size: 0.85em;
+  font-size: 0.9em;
   padding: 2px 4px;
   flex-shrink: 0;
 }
@@ -129,6 +142,6 @@ toast-notifications {
 
 @media (max-width: 480px) {
   .toast-notifications__container {
-    top: 6px;
+    top: 15%;
   }
 }
