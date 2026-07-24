@@ -53,6 +53,20 @@ function formatGp(value) {
   return value.toLocaleString();
 }
 
+// Some RSNs contain invisible/zero-width characters (a known trick to get a
+// name that displays identically to an already-taken one, bypassing
+// Jagex's duplicate-name check). Discord's own text rendering treats those
+// as zero-width, but this font apparently gives them real advance width,
+// which shows up as odd gaps between letters -- strip them before drawing.
+const ZERO_WIDTH_CHARS = /[​‌‍﻿⁠­]/g;
+function sanitizeName(name) {
+  return name
+    .replace(ZERO_WIDTH_CHARS, '')
+    .replace(/ /g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function getItemIcon(itemName) {
   if (!itemName) return null;
   const id = getItemId(itemName);
@@ -115,7 +129,7 @@ function drawName(ctx, name, centerY) {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = COLOR_NAME;
   ctx.font = '26px rsbold';
-  ctx.fillText(name, 78, centerY);
+  ctx.fillText(sanitizeName(name), 78, centerY);
 }
 
 function drawValue(ctx, text, centerY, width) {
