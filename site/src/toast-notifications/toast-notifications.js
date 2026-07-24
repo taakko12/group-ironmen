@@ -2,7 +2,7 @@ import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
 import { Item } from "../data/item";
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 2000;
 const AUTO_DISMISS_MS = 9000;
 const MAX_VISIBLE_TOASTS = 6;
 const CURSOR_STORAGE_KEY = "toast-notifications:cursor";
