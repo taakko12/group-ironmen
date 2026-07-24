@@ -1,9 +1,18 @@
-// Polls the backend's pending-bank-pings queue and posts a channel mention
-// for each one. The backend owns all the "who's inactive holding what"
-// logic (see server/src/db.rs poll_bank_pings) -- this is purely Discord I/O.
+// Polls the backend's pending-bank-pings queue and posts one batched alert
+// per member/reason to Discord. The backend owns all the "who's inactive
+// holding what" logic (see server/src/db.rs poll_bank_pings) -- this is
+// purely Discord I/O.
+//
+// Deliberately doesn't run item names through the LLM personality voice:
+// that was producing messages that dropped the specific item ("great job
+// screwing up something simple" with no item named), which defeats the
+// point of a bank-item alert. This is plain, deterministic, and always
+// names every item, backed by a canvas graphic instead of a wall of
+// near-identical one-item-per-message pings.
 
+const { AttachmentBuilder } = require('discord.js');
 const { getItemName } = require('./itemData');
-const { generateBankPingLine } = require('./personality');
+const { renderBankAlert } = require('./bankPingImage');
 
 const POLL_INTERVAL_MS = 10 * 1000;
 
@@ -32,23 +41,43 @@ async function pollOnce(client) {
     return;
   }
 
+  // Batch by member + reason so one person's pile of unbanked items (or one
+  // manual request covering several items) becomes a single message with a
+  // single graphic, instead of one near-identical ping per item.
+  const groups = new Map();
   for (const ping of pings) {
     if (!ping.discord_id) {
       console.warn(`[bankPings] ${ping.member_name} has no linked Discord ID, skipping item ${ping.item_id}`);
       continue;
     }
-    const itemName = getItemName(ping.item_id);
-    const isManual = ping.reason === 'manual';
-    const context = isManual
-      ? `A group member asked ${ping.member_name} to bank their ${itemName}. Write one short in-character line telling them to do it.`
-      : `${ping.member_name} logged off while still holding ${itemName} instead of banking it. Write one short in-character line calling them out for it.`;
-    const fallback = isManual
-      ? `someone requested you bank your **${itemName}**!`
-      : `you went offline holding **${itemName}** — please bank it!`;
+    const key = `${ping.discord_id}:${ping.reason}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        discordId: ping.discord_id,
+        memberName: ping.member_name,
+        reason: ping.reason,
+        itemNames: [],
+      });
+    }
+    groups.get(key).itemNames.push(getItemName(ping.item_id));
+  }
 
-    const line = await generateBankPingLine(context);
-    const message = `${isManual ? '📢' : '⚠️'} <@${ping.discord_id}> ${line ?? fallback}`;
-    await channel.send(message).catch((err) => console.error(`[bankPings] Failed to send message: ${err.message}`));
+  for (const group of groups.values()) {
+    const isManual = group.reason === 'manual';
+    const itemList = group.itemNames.map((name) => `**${name}**`).join(', ');
+    const text = isManual
+      ? `📢 <@${group.discordId}> someone asked you to bank: ${itemList}`
+      : `⚠️ <@${group.discordId}> you went offline holding: ${itemList} — go bank ${
+          group.itemNames.length === 1 ? 'it' : 'them'
+        }!`;
+
+    try {
+      const image = await renderBankAlert(group.memberName, group.itemNames, { manual: isManual });
+      const attachment = new AttachmentBuilder(image, { name: 'bank-alert.png' });
+      await channel.send({ content: text, files: [attachment] });
+    } catch (err) {
+      console.error(`[bankPings] Failed to send message: ${err.message}`);
+    }
   }
 }
 

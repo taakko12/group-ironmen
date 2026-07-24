@@ -4,12 +4,9 @@
 // are pulled from the site's own /icons/items/{id}.webp so the artwork is
 // literally the website's assets, not a redraw.
 
-const { createCanvas, GlobalFonts, loadImage } = require('@napi-rs/canvas');
-const path = require('path');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
+require('./fonts');
 const { getItemId, SITE_URL } = require('./itemData');
-
-GlobalFonts.registerFromPath(path.join(__dirname, 'assets/fonts/RuneScape-Chat-07.ttf'), 'rssmall');
-GlobalFonts.registerFromPath(path.join(__dirname, 'assets/fonts/RuneScape-Chat-Bold-07.ttf'), 'rsbold');
 
 const WIDTH = 720;
 const PADDING = 24;
