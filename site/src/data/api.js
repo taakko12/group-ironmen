@@ -39,6 +39,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/request-bank`;
   }
 
+  get requestBankBatchUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/request-bank-batch`;
+  }
+
   get recentBankPingsUrl() {
     return `${this.baseUrl}/group/${this.groupName}/recent-bank-pings`;
   }
@@ -296,6 +300,22 @@ class Api {
   async requestBank(memberName, itemId) {
     const response = await fetch(this.requestBankUrl, {
       body: JSON.stringify({ member_name: memberName, item_id: itemId }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "POST",
+    });
+
+    return response;
+  }
+
+  // selections: [{ playerName, itemId }]
+  async requestBankBatch(selections) {
+    const response = await fetch(this.requestBankBatchUrl, {
+      body: JSON.stringify({
+        requests: selections.map((s) => ({ member_name: s.playerName, item_id: s.itemId })),
+      }),
       headers: {
         "Content-Type": "application/json",
         Authorization: this.groupToken,

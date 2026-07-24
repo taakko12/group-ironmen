@@ -68,3 +68,7 @@
 .items-page__info-box input {
   margin: 0 0.5em 0 0;
 }
+
+.items-page__request-bank {
+  margin-left: 8px;
+}

@@ -1097,6 +1097,61 @@ pub async fn add_manual_bank_ping(
     Ok(())
 }
 
+// Capped well above any realistic "select some items on the Items page"
+// batch, purely so a malformed/malicious request can't queue an unbounded
+// number of inserts in one call.
+const MAX_BATCH_BANK_REQUESTS: usize = 200;
+
+pub async fn add_manual_bank_pings_batch(
+    client: &Client,
+    group_id: i64,
+    requests: &[crate::models::RequestBank],
+) -> Result<(), ApiError> {
+    if requests.is_empty() || requests.len() > MAX_BATCH_BANK_REQUESTS {
+        return Err(ApiError::GroupMemberValidationError(format!(
+            "requests length violated range constraint 1..={} actual={}",
+            MAX_BATCH_BANK_REQUESTS,
+            requests.len()
+        )));
+    }
+
+    // Member ids get looked up once per distinct name (a batch is typically
+    // one player with several items checked, occasionally a couple more),
+    // rather than once per request.
+    let mut member_ids: HashMap<&str, i64> = HashMap::new();
+    let stmt = client
+        .prepare_cached(
+            "INSERT INTO groupironman.bank_pings (member_id, item_id, reason) VALUES ($1, $2, 'manual')",
+        )
+        .await?;
+
+    for request in requests {
+        let member_id = match member_ids.get(request.member_name.as_str()) {
+            Some(id) => *id,
+            None => {
+                let id = match try_get_member_id(client, group_id, &request.member_name).await? {
+                    Some(id) => id,
+                    None => {
+                        return Err(ApiError::GroupMemberValidationError(format!(
+                            "No member named '{}' in this group",
+                            request.member_name
+                        )))
+                    }
+                };
+                member_ids.insert(&request.member_name, id);
+                id
+            }
+        };
+
+        client
+            .execute(&stmt, &[&member_id, &request.item_id])
+            .await
+            .map_err(ApiError::RequestBankError)?;
+    }
+
+    Ok(())
+}
+
 /// Decodes a raw `[item_id, quantity, item_id, quantity, ...]` column (the
 /// same encoding the frontend's `transformItemsFromStorage` expects) into the
 /// set of valid (id > 0) item ids present.
@@ -1199,7 +1254,7 @@ UPDATE groupironman.bank_pings p
 SET delivered_at = NOW()
 FROM groupironman.members m
 WHERE p.member_id = m.member_id AND m.group_id = $1 AND p.delivered_at IS NULL
-RETURNING m.member_name, m.discord_id, p.item_id, p.reason
+RETURNING m.member_id, m.member_name, m.discord_id, p.item_id, p.reason
 "#,
         )
         .await?;
@@ -1208,17 +1263,71 @@ RETURNING m.member_name, m.discord_id, p.item_id, p.reason
         .await
         .map_err(ApiError::PollBankPingsError)?;
 
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Delivered pings only carry an item_id, not a quantity, so look up how
+    // much of that item each pinged member is actually holding right now
+    // (equipment + inventory + bank) -- fetched fresh here rather than at
+    // ping-creation time so the count reflects what's true when the alert
+    // actually goes out, not whatever it was when the offline/manual ping
+    // was first queued. Queries every member in the group (same WHERE
+    // clause as the must-bank-items scan above) rather than filtering to
+    // just the pinged member_ids, since groups are small and this avoids
+    // relying on an untested `= ANY($1)` array-parameter query shape.
+    let holdings_stmt = client
+        .prepare_cached("SELECT member_id, equipment, inventory, bank FROM groupironman.members WHERE group_id=$1")
+        .await?;
+    let holdings_rows = client
+        .query(&holdings_stmt, &[&group_id])
+        .await
+        .map_err(ApiError::PollBankPingsError)?;
+
+    let mut holdings: HashMap<i64, (Option<Vec<i32>>, Option<Vec<i32>>, Option<Vec<i32>>)> = HashMap::new();
+    for row in holdings_rows {
+        let member_id: i64 = row.try_get("member_id")?;
+        let equipment: Option<Vec<i32>> = row.try_get("equipment").ok();
+        let inventory: Option<Vec<i32>> = row.try_get("inventory").ok();
+        let bank: Option<Vec<i32>> = row.try_get("bank").ok();
+        holdings.insert(member_id, (equipment, inventory, bank));
+    }
+
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
+        let member_id: i64 = row.try_get("member_id")?;
+        let item_id: i32 = row.try_get("item_id")?;
+        let quantity = holdings
+            .get(&member_id)
+            .map(|(equipment, inventory, bank)| {
+                quantity_of_item(equipment, item_id) + quantity_of_item(inventory, item_id) + quantity_of_item(bank, item_id)
+            })
+            .unwrap_or(0);
+
         result.push(PendingBankPing {
             member_name: row.try_get("member_name")?,
             discord_id: row.try_get("discord_id").ok(),
-            item_id: row.try_get("item_id")?,
+            item_id,
             reason: row.try_get("reason")?,
+            quantity,
         });
     }
 
     Ok(result)
+}
+
+/// Sums the quantity of `item_id` across a raw `[id, qty, id, qty, ...]`
+/// snapshot column (equipment/inventory/bank all use this encoding), via the
+/// same (id, qty) decode `remove_item_quantity`/`add_item_quantity` use.
+fn quantity_of_item(raw: &Option<Vec<i32>>, item_id: i32) -> i64 {
+    match raw {
+        Some(items) => decode_item_stacks(items)
+            .into_iter()
+            .filter(|(id, _)| *id == item_id)
+            .map(|(_, qty)| qty as i64)
+            .sum(),
+        None => 0,
+    }
 }
 
 /// Non-destructive read of recent bank pings for the site's toast

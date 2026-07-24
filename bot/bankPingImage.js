@@ -47,10 +47,15 @@ async function getItemIcon(itemName) {
   return promise;
 }
 
-async function renderBankAlert(memberName, itemNames, { manual = false } = {}) {
-  const icons = await Promise.all(itemNames.map(getItemIcon));
+// items: [{ name, quantity }] -- quantity is how many of that item the
+// member is currently holding, looked up fresh by the backend at delivery
+// time (see server/src/db.rs poll_bank_pings), so this always reflects what
+// they actually have on them rather than just naming the item with no sense
+// of scale.
+async function renderBankAlert(memberName, items, { manual = false } = {}) {
+  const icons = await Promise.all(items.map((item) => getItemIcon(item.name)));
 
-  const height = HEADER_HEIGHT + itemNames.length * ROW_HEIGHT + PADDING;
+  const height = HEADER_HEIGHT + items.length * ROW_HEIGHT + PADDING;
   const { canvas, ctx } = createScaledCanvas(WIDTH, height);
 
   ctx.fillStyle = COLOR_BACKGROUND;
@@ -71,7 +76,7 @@ async function renderBankAlert(memberName, itemNames, { manual = false } = {}) {
   ctx.lineWidth = 4;
   ctx.strokeRect(2, 2, WIDTH - 4, height - 4);
 
-  itemNames.forEach((name, i) => {
+  items.forEach((item, i) => {
     const y = HEADER_HEIGHT + i * ROW_HEIGHT;
     if (i > 0) {
       ctx.strokeStyle = COLOR_DIVIDER;
@@ -92,7 +97,8 @@ async function renderBankAlert(memberName, itemNames, { manual = false } = {}) {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = icons[i] ? COLOR_NAME : COLOR_SUBTEXT;
     ctx.font = '22px rsbold';
-    ctx.fillText(name, x, centerY);
+    const label = item.quantity > 1 ? `${item.quantity.toLocaleString()} x ${item.name}` : item.name;
+    ctx.fillText(label, x, centerY);
   });
 
   return canvas.toBuffer('image/png');

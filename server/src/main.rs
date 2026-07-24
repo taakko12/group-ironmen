@@ -92,6 +92,7 @@ async fn main() -> std::io::Result<()> {
             .service(authed::remove_must_bank_item)
             .service(authed::get_must_bank_items)
             .service(authed::request_bank)
+            .service(authed::request_bank_batch)
             .service(authed::poll_bank_pings)
             .service(authed::get_recent_bank_pings)
             .service(authed::add_name_change)

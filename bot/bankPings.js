@@ -56,23 +56,25 @@ async function pollOnce(client) {
         discordId: ping.discord_id,
         memberName: ping.member_name,
         reason: ping.reason,
-        itemNames: [],
+        items: [],
       });
     }
-    groups.get(key).itemNames.push(getItemName(ping.item_id));
+    groups.get(key).items.push({ name: getItemName(ping.item_id), quantity: ping.quantity ?? 1 });
   }
 
   for (const group of groups.values()) {
     const isManual = group.reason === 'manual';
-    const itemList = group.itemNames.map((name) => `**${name}**`).join(', ');
+    const itemList = group.items
+      .map((item) => (item.quantity > 1 ? `**${item.quantity.toLocaleString()} x ${item.name}**` : `**${item.name}**`))
+      .join(', ');
     const text = isManual
       ? `📢 <@${group.discordId}> someone asked you to bank: ${itemList}`
       : `⚠️ <@${group.discordId}> you went offline holding: ${itemList} — go bank ${
-          group.itemNames.length === 1 ? 'it' : 'them'
+          group.items.length === 1 ? 'it' : 'them'
         }!`;
 
     try {
-      const image = await renderBankAlert(group.memberName, group.itemNames, { manual: isManual });
+      const image = await renderBankAlert(group.memberName, group.items, { manual: isManual });
       const attachment = new AttachmentBuilder(image, { name: 'bank-alert.png' });
       await channel.send({ content: text, files: [attachment] });
     } catch (err) {

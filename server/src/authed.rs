@@ -4,8 +4,8 @@ use crate::error::ApiError;
 use crate::models::{
     AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
     GroupStorageLog, MustBankItem, NameChange, NewDeath, NewLootDrop, NewStorageLogEntry,
-    PendingBankPing, RecentBankPings, RenameGroupMember, RequestBank, SetMemberDiscordId,
-    WomPlayerGains, SHARED_MEMBER,
+    PendingBankPing, RecentBankPings, RenameGroupMember, RequestBank, RequestBankBatch,
+    SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
 use crate::wom;
@@ -353,6 +353,17 @@ pub async fn request_bank(
 ) -> Result<HttpResponse, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     db::add_manual_bank_ping(&client, auth.group_id, &body.member_name, body.item_id).await?;
+    Ok(HttpResponse::Created().finish())
+}
+
+#[post("/request-bank-batch")]
+pub async fn request_bank_batch(
+    auth: Authenticated,
+    body: web::Json<RequestBankBatch>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::add_manual_bank_pings_batch(&client, auth.group_id, &body.requests).await?;
     Ok(HttpResponse::Created().finish())
 }
 

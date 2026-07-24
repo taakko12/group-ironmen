@@ -1,6 +1,6 @@
 import { BaseElement } from "../base-element/base-element";
-import { api } from "../data/api";
 import { mustBankItems } from "../data/must-bank-items";
+import { bankRequestSelection } from "../data/bank-request-selection";
 
 export class InventoryItem extends BaseElement {
   constructor() {
@@ -32,6 +32,7 @@ export class InventoryItem extends BaseElement {
     }
 
     this.subscribe("must-bank-items-updated", this.updateTagState.bind(this));
+    this.subscribe("bank-request-selection-updated", this.syncRequestCheckboxes.bind(this));
   }
 
   disconnectedCallback() {
@@ -72,7 +73,9 @@ export class InventoryItem extends BaseElement {
 </div>
 ${
   quantity > 0
-    ? `<span class="inventory-item__request-button" data-player-name="${playerName}" title="Ask ${playerName} to bank this">📢</span>`
+    ? `<input type="checkbox" class="inventory-item__request-checkbox" data-player-name="${playerName}"
+        title="Select to request ${playerName} bank this"
+        ${bankRequestSelection.has(playerName, this.itemId) ? "checked" : ""} />`
     : "<span></span>"
 }
 `;
@@ -89,8 +92,17 @@ ${
       this.updateTagState();
     }
 
-    for (const button of this.querySelectorAll(".inventory-item__request-button")) {
-      this.eventListener(button, "click", this.handleRequestClick.bind(this));
+    for (const checkbox of this.querySelectorAll(".inventory-item__request-checkbox")) {
+      this.eventListener(checkbox, "change", this.handleRequestCheckboxChange.bind(this));
+    }
+  }
+
+  // Re-applies checked state onto existing checkboxes (rather than a full
+  // re-render) when the selection changes elsewhere, e.g. the Items page's
+  // batch button clearing everything after a successful send.
+  syncRequestCheckboxes() {
+    for (const checkbox of this.querySelectorAll(".inventory-item__request-checkbox")) {
+      checkbox.checked = bankRequestSelection.has(checkbox.dataset.playerName, this.itemId);
     }
   }
 
@@ -109,13 +121,10 @@ ${
     }
   }
 
-  async handleRequestClick(event) {
+  handleRequestCheckboxChange(event) {
     event.stopPropagation();
-    const button = event.currentTarget;
-    const playerName = button.dataset.playerName;
-    await api.requestBank(playerName, this.itemId);
-    button.classList.add("inventory-item__request-button--sent");
-    setTimeout(() => button.classList.remove("inventory-item__request-button--sent"), 2000);
+    const checkbox = event.currentTarget;
+    bankRequestSelection.toggle(checkbox.dataset.playerName, this.itemId, checkbox.checked);
   }
 
   get quantity() {

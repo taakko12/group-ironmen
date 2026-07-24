@@ -64,16 +64,11 @@ inventory-item.rendered {
   filter: none;
 }
 
-.inventory-item__request-button {
+.inventory-item__request-checkbox {
   cursor: pointer;
-  opacity: 0.35;
-  filter: grayscale(100%);
-}
-
-.inventory-item__request-button:hover,
-.inventory-item__request-button--sent {
-  opacity: 1;
-  filter: none;
+  width: 16px;
+  height: 16px;
+  justify-self: end;
 }
 
 .inventory-item__quantity-bar {

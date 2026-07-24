@@ -204,12 +204,23 @@ pub struct RequestBank {
     pub item_id: i32,
 }
 
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct RequestBankBatch {
+    pub requests: Vec<RequestBank>,
+}
+
 #[derive(Serialize)]
 pub struct PendingBankPing {
     pub member_name: String,
     pub discord_id: Option<String>,
     pub item_id: i32,
     pub reason: String,
+    /// How many of item_id the member is currently holding (equipment +
+    /// inventory + bank combined), looked up fresh at delivery time so the
+    /// Discord alert can say "23 x Rune arrow" instead of just naming the
+    /// item with no sense of how much is actually sitting there.
+    pub quantity: i64,
 }
 
 /// Non-destructive read of recent bank pings, for the frontend's toast
