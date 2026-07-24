@@ -6,6 +6,7 @@ const { processLootMessage, processDeathMessage, processGroupStorageMessage } = 
 const { registerCommands } = require('./deploy-commands');
 const itemData = require('./itemData');
 const bankPings = require('./bankPings');
+const personality = require('./personality');
 
 const LOOT_CHANNEL_ID = process.env.LOOT_CHANNEL_ID;
 const DEATH_CHANNEL_ID = process.env.DEATH_CHANNEL_ID;
@@ -60,19 +61,23 @@ client.on('interactionCreate', async (interaction) => {
 
 client.on('messageCreate', async (message) => {
   // Dink posts via a Discord webhook, not a bot user account
-  if (!message.webhookId) return;
+  if (message.webhookId) {
+    if (DEATH_CHANNEL_ID && message.channelId === DEATH_CHANNEL_ID) {
+      await processDeathMessage(message);
+    }
 
-  if (DEATH_CHANNEL_ID && message.channelId === DEATH_CHANNEL_ID) {
-    await processDeathMessage(message);
+    if (LOOT_CHANNEL_ID && message.channelId === LOOT_CHANNEL_ID) {
+      await processLootMessage(message);
+    }
+
+    if (GROUP_STORAGE_CHANNEL_ID && message.channelId === GROUP_STORAGE_CHANNEL_ID) {
+      await processGroupStorageMessage(message);
+    }
+    return;
   }
 
-  if (LOOT_CHANNEL_ID && message.channelId === LOOT_CHANNEL_ID) {
-    await processLootMessage(message);
-  }
-
-  if (GROUP_STORAGE_CHANNEL_ID && message.channelId === GROUP_STORAGE_CHANNEL_ID) {
-    await processGroupStorageMessage(message);
-  }
+  if (message.author.bot) return;
+  await personality.maybeReply(message).catch((err) => console.error(`[personality] ${err.message}`));
 });
 
 client.login(process.env.DISCORD_TOKEN);
