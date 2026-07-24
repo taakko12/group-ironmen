@@ -14,7 +14,7 @@ GlobalFonts.registerFromPath(path.join(__dirname, 'assets/fonts/RuneScape-Chat-B
 const WIDTH = 720;
 const PADDING = 24;
 const HEADER_HEIGHT = 84;
-const ROW_HEIGHT = 68;
+const ROW_HEIGHT = 72;
 const MAX_ROWS = 10;
 
 const COLOR_BACKGROUND = '#000000';
@@ -24,9 +24,19 @@ const COLOR_NAME = '#ffffff';
 const COLOR_VALUE = '#ffff00';
 const COLOR_SUBTEXT = '#9a9a9a';
 const COLOR_DIVIDER = 'rgba(255, 255, 255, 0.08)';
-const RANK_COLORS = ['#ffd700', '#c0c0c0', '#cd7f32'];
+const RANK_COLORS = ['#ffd700', '#c0c0c0', '#e0954f'];
 
 const iconCache = new Map();
+
+// Long comma-grouped numbers (billions of gp) get hard to read at pixel-font
+// sizes, so abbreviate the same way OSRS loot trackers conventionally do.
+function formatGp(value) {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toLocaleString();
+}
 
 async function getItemIcon(itemName) {
   if (!itemName) return null;
@@ -81,7 +91,7 @@ function drawRank(ctx, rank, centerY) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = RANK_COLORS[rank - 1] ?? COLOR_NAME;
-  ctx.font = '24px rsbold';
+  ctx.font = '26px rsbold';
   ctx.fillText(`#${rank}`, PADDING, centerY);
 }
 
@@ -89,7 +99,7 @@ function drawName(ctx, name, centerY) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = COLOR_NAME;
-  ctx.font = '24px rsbold';
+  ctx.font = '26px rsbold';
   ctx.fillText(name, 78, centerY);
 }
 
@@ -97,7 +107,7 @@ function drawValue(ctx, text, centerY, width) {
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = COLOR_VALUE;
-  ctx.font = '24px rsbold';
+  ctx.font = '26px rsbold';
   ctx.fillText(text, width - PADDING, centerY);
 }
 
@@ -130,8 +140,8 @@ async function renderLootLeaderboard(rows, periodLabel) {
     const subY = y + 50;
     drawRank(ctx, i + 1, mainY);
     drawName(ctx, row.name, mainY);
-    drawValue(ctx, `${row.total.toLocaleString()} gp`, mainY, WIDTH);
-    const subtext = row.mostRecent ? `${row.mostRecent.item_name} (${row.mostRecent.gp_value.toLocaleString()} gp)` : '';
+    drawValue(ctx, `${formatGp(row.total)} gp`, mainY, WIDTH);
+    const subtext = row.mostRecent ? `${row.mostRecent.item_name} (${formatGp(row.mostRecent.gp_value)} gp)` : '';
     drawSubtext(ctx, icons[i], subtext, subY);
   });
 
