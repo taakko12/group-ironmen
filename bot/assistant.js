@@ -131,20 +131,30 @@ async function executeTool(name, args) {
 // Discord mentions arrive as raw <@id> syntax, which the model can't resolve
 // on its own -- swap them for RSNs (or usernames, for anyone unlinked) so
 // "is @saint dry at yama" reads as plain text before it ever reaches Groq.
+// Also resolves who actually sent the message: nothing else in this flow
+// carries that information, so without it the final in-character restyle
+// pass has no idea who it's actually replying to and will just invent a
+// plausible-sounding member name from the personality prompt's character
+// traits instead of addressing the real asker.
 async function resolveMentionsToNames(message) {
-  let content = message.content;
-  if (message.mentions.users.size === 0) return content.trim();
-
   const members = await getGroupMembers();
-  for (const user of message.mentions.users.values()) {
-    if (user.id === message.client.user.id) continue;
-    const member = members.find((m) => m.discord_id === user.id);
-    const replacement = member ? member.name : user.username;
-    content = content.split(`<@${user.id}>`).join(replacement).split(`<@!${user.id}>`).join(replacement);
-  }
 
-  content = content.replace(new RegExp(`<@!?${message.client.user.id}>`, 'g'), '').trim();
-  return content;
+  let content = message.content;
+  if (message.mentions.users.size > 0) {
+    for (const user of message.mentions.users.values()) {
+      if (user.id === message.client.user.id) continue;
+      const member = members.find((m) => m.discord_id === user.id);
+      const replacement = member ? member.name : user.username;
+      content = content.split(`<@${user.id}>`).join(replacement).split(`<@!${user.id}>`).join(replacement);
+    }
+    content = content.replace(new RegExp(`<@!?${message.client.user.id}>`, 'g'), '');
+  }
+  content = content.trim();
+
+  const askerMember = members.find((m) => m.discord_id === message.author.id);
+  const askerName = askerMember ? askerMember.name : message.author.username;
+
+  return { question: content, askerName };
 }
 
 async function callGroqWithTools(messages, { allowTools = true } = {}) {
@@ -184,10 +194,10 @@ async function callGroqWithTools(messages, { allowTools = true } = {}) {
   return response.json();
 }
 
-async function answerQuestion(question) {
+async function answerQuestion(question, askerName) {
   const messages = [
     { role: 'system', content: TOOL_SYSTEM_PROMPT },
-    { role: 'user', content: question },
+    { role: 'user', content: `${askerName} asks: ${question}` },
   ];
 
   let factualAnswer = null;
@@ -225,19 +235,24 @@ async function answerQuestion(question) {
 
   // Restyle the plain factual answer in the bot's own voice; if that call
   // fails for any reason, the factual answer alone is still a fine reply.
-  const inCharacter = await toInCharacterLine(`Answer this question in character: "${question}"\n\nThe real answer is: ${factualAnswer}`);
+  // askerName is spelled out explicitly here (not left for the model to
+  // infer) so it addresses the real person who asked instead of guessing a
+  // plausible-sounding name from the personality prompt's character traits.
+  const inCharacter = await toInCharacterLine(
+    `${askerName} just asked you: "${question}"\n\nThe real answer is: ${factualAnswer}\n\nReply in character, directly to ${askerName}.`
+  );
   return inCharacter ?? factualAnswer;
 }
 
 async function handleMention(message) {
   if (!GROQ_API_KEY) return;
 
-  const question = await resolveMentionsToNames(message);
+  const { question, askerName } = await resolveMentionsToNames(message);
   if (!question) return;
 
   await message.channel.sendTyping().catch(() => {});
   try {
-    const answer = await answerQuestion(question);
+    const answer = await answerQuestion(question, askerName);
     if (answer) await message.reply(answer);
   } catch (err) {
     console.error(`[assistant] Failed to answer question: ${err.message}`);
