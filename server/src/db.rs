@@ -1125,7 +1125,10 @@ const BANK_PING_COOLDOWN_HOURS: i64 = 6;
 /// Detects members who have been inactive for over `INACTIVE_THRESHOLD_MINUTES`
 /// while still holding a tagged "must bank" item, records new offline pings
 /// for them (deduped via a cooldown window), then drains and returns every
-/// undelivered ping (offline + manual) for the group.
+/// undelivered ping (offline + manual) for the group. Excludes `@SHARED`
+/// (the virtual shared-storage row) -- it has no Discord ID to ping and
+/// "going offline" doesn't mean anything for it, so including it just
+/// produced dead rows.
 pub async fn poll_bank_pings(client: &Client, group_id: i64) -> Result<Vec<PendingBankPing>, ApiError> {
     let must_bank_items: HashSet<i32> = get_must_bank_items(client, group_id).await?.into_iter().collect();
 
@@ -1138,12 +1141,12 @@ GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
 quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
 rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
 collection_log_last_update) as last_updated
-FROM groupironman.members WHERE group_id=$1
+FROM groupironman.members WHERE group_id=$1 AND member_name != $2
 "#,
             )
             .await?;
         let rows = client
-            .query(&stmt, &[&group_id])
+            .query(&stmt, &[&group_id, &SHARED_MEMBER])
             .await
             .map_err(ApiError::PollBankPingsError)?;
 
