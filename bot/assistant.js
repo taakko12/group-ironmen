@@ -32,7 +32,11 @@ const SHARED_MEMBER_NAME = '@SHARED';
 // function-call syntax instead of Groq's structured format, which Groq then
 // rejects with a tool_use_failed error). Tool selection stays plain; the
 // personality voice gets layered on afterward as a separate restyle pass.
-const TOOL_SYSTEM_PROMPT = `You are a data assistant for an OSRS group ironman Discord bot. Call tools to look up real data before answering questions about loot, deaths, skill/boss gains, or dry streaks -- never guess at numbers. Once you have what you need, answer in one short, plain, factual sentence or two. No personality or jokes needed here -- just the facts.`;
+const TOOL_SYSTEM_PROMPT = `You are a data assistant for an OSRS group ironman Discord bot. Only call a tool when the question is explicitly asking to look up real data you have access to: loot totals, death counts, skill/boss XP gains, or dry-streak odds for a specific named member on a specific boss. Never call a tool just because the question mentions a boss, item, or group-related wording in passing.
+
+If the question is really an opinion, banter, hypothetical, or anything else a tool can't actually answer (e.g. "why would someone hoard potions", "what do you think of X"), do not call any tool at all -- just say plainly, in one sentence, that this isn't something you have data to look up. Never guess at numbers, and never report a tool's result as the answer unless it actually addresses what was asked.
+
+Once you have what you need, answer in one short, plain, factual sentence or two. No personality or jokes needed here -- just the facts.`;
 
 const tools = [
   {
