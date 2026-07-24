@@ -7,6 +7,7 @@ const { registerCommands } = require('./deploy-commands');
 const itemData = require('./itemData');
 const bankPings = require('./bankPings');
 const personality = require('./personality');
+const assistant = require('./assistant');
 
 const LOOT_CHANNEL_ID = process.env.LOOT_CHANNEL_ID;
 const DEATH_CHANNEL_ID = process.env.DEATH_CHANNEL_ID;
@@ -77,6 +78,12 @@ client.on('messageCreate', async (message) => {
   }
 
   if (message.author.bot) return;
+
+  if (message.mentions.has(client.user)) {
+    await assistant.handleMention(message).catch((err) => console.error(`[assistant] ${err.message}`));
+    return;
+  }
+
   await personality.maybeReply(message).catch((err) => console.error(`[personality] ${err.message}`));
 });
 

@@ -87,14 +87,15 @@ async function generateBankPingLine(context) {
   }
 }
 
+// Only for the ambient/unprompted chime-in -- direct @mentions are routed to
+// assistant.js instead (see index.js), since those are real questions with
+// tool access rather than vibes off recent chat.
 async function maybeReply(message) {
   pushHistory(message.channelId, message.author.username, message.content);
 
   if (!GROQ_API_KEY) return;
   if (ALLOWED_CHANNEL_IDS && !ALLOWED_CHANNEL_IDS.has(message.channelId)) return;
-
-  const mentioned = message.mentions.has(message.client.user);
-  if (!mentioned && Math.random() >= TRIGGER_CHANCE) return;
+  if (Math.random() >= TRIGGER_CHANCE) return;
 
   // Claimed up front (not after the await) so two messages arriving close
   // together can't both slip past the cooldown check and double-fire.

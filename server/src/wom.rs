@@ -17,6 +17,8 @@ const WOM_CALL_SPACING_MS: u64 = 500;
 
 static WOM_GAINS: LazyLock<ArcSwapAny<Arc<String>>> =
     LazyLock::new(|| ArcSwap::from(Arc::new("{}".to_string())));
+static WOM_BOSS_KC: LazyLock<ArcSwapAny<Arc<String>>> =
+    LazyLock::new(|| ArcSwap::from(Arc::new("{}".to_string())));
 
 #[derive(Deserialize)]
 struct WomGainedResponse {
@@ -39,6 +41,29 @@ struct WomBossGained {
 #[derive(Deserialize)]
 struct WomGainedValue {
     gained: i64,
+}
+
+// Separate from the /gained response above: this is the player details
+// endpoint, which reports absolute (not delta) boss kill counts. Needed for
+// dry-streak style "how many kills without X" math, which cares about the
+// running total rather than gains over a period.
+#[derive(Deserialize)]
+struct WomPlayerDetailsResponse {
+    #[serde(rename = "latestSnapshot")]
+    latest_snapshot: WomLatestSnapshot,
+}
+#[derive(Deserialize)]
+struct WomLatestSnapshot {
+    data: WomSnapshotData,
+}
+#[derive(Deserialize)]
+struct WomSnapshotData {
+    #[serde(default)]
+    bosses: HashMap<String, WomBossKc>,
+}
+#[derive(Deserialize)]
+struct WomBossKc {
+    kills: i64,
 }
 
 fn wom_user_agent() -> String {
@@ -140,16 +165,79 @@ async fn fetch_player_gains(rsn: &str, period: &str) -> Result<WomPlayerGains, A
     })
 }
 
-pub async fn update_wom_gains(db_pool: &Pool) -> Result<(), ApiError> {
+// Shared by update_wom_gains and update_wom_boss_kc below -- this is every
+// member across every group on this deployment (not scoped to one group),
+// since the WOM caches are process-wide and keyed by member_name; endpoints
+// that serve a single group filter the cache down by that group's own
+// member list before returning it.
+async fn get_all_member_names(db_pool: &Pool) -> Result<Vec<String>, ApiError> {
     let client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let stmt = client
         .prepare_cached("SELECT DISTINCT member_name FROM groupironman.members WHERE member_name != $1")
         .await?;
     let rows = client.query(&stmt, &[&SHARED_MEMBER]).await?;
-    let member_names: Vec<String> = rows
+    Ok(rows.into_iter().map(|row| row.try_get(0)).collect::<Result<_, _>>()?)
+}
+
+/// Fetches one player's absolute (not gained) boss kill counts, via the WOM
+/// player-details endpoint -- the /gained endpoint above only ever exposes
+/// deltas, never the running total, so dry-streak math needs this instead.
+async fn fetch_player_boss_kc(rsn: &str) -> Result<HashMap<String, i64>, ApiError> {
+    let encoded_rsn = rsn.replace(' ', "%20");
+    let url = format!("{}/players/{}", WOM_BASE_URL, encoded_rsn);
+    let user_agent = wom_user_agent();
+
+    let response: WomPlayerDetailsResponse = task::spawn_blocking(move || {
+        ureq::get(&url)
+            .header("User-Agent", &user_agent)
+            .call()
+            .map_err(ApiError::UreqError)?
+            .body_mut()
+            .read_json::<WomPlayerDetailsResponse>()
+            .map_err(ApiError::UreqError)
+    })
+    .await
+    .unwrap()?;
+
+    // -1 means WOM has no data for that boss on this player (never ranked on
+    // the hiscores for it), which is meaningfully different from 0 kills.
+    Ok(response
+        .latest_snapshot
+        .data
+        .bosses
         .into_iter()
-        .map(|row| row.try_get(0))
-        .collect::<Result<_, _>>()?;
+        .filter(|(_, kc)| kc.kills >= 0)
+        .map(|(name, kc)| (name, kc.kills))
+        .collect())
+}
+
+pub async fn update_wom_boss_kc(db_pool: &Pool) -> Result<(), ApiError> {
+    let member_names = get_all_member_names(db_pool).await?;
+
+    let mut all_kc: HashMap<String, HashMap<String, i64>> = HashMap::new();
+    for member_name in &member_names {
+        match fetch_player_boss_kc(member_name).await {
+            Ok(kc) => {
+                all_kc.insert(member_name.clone(), kc);
+            }
+            Err(err) => {
+                log::error!("Failed to fetch WOM boss KC for '{}': {}", member_name, err);
+            }
+        }
+        time::sleep(Duration::from_millis(WOM_CALL_SPACING_MS)).await;
+    }
+
+    WOM_BOSS_KC.store(Arc::new(serde_json::to_string(&all_kc)?));
+    Ok(())
+}
+
+pub fn get_cached_wom_boss_kc() -> HashMap<String, HashMap<String, i64>> {
+    let raw = WOM_BOSS_KC.load();
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+pub async fn update_wom_gains(db_pool: &Pool) -> Result<(), ApiError> {
+    let member_names = get_all_member_names(db_pool).await?;
 
     let mut all_gains: HashMap<String, HashMap<String, WomPlayerGains>> = HashMap::new();
     for period in WOM_PERIODS {
@@ -187,6 +275,10 @@ pub fn start_wom_updater(db_pool: Pool) {
 
             if let Err(err) = update_wom_gains(&db_pool).await {
                 log::error!("Failed to update WOM gains: {}", err);
+            }
+
+            if let Err(err) = update_wom_boss_kc(&db_pool).await {
+                log::error!("Failed to update WOM boss KC: {}", err);
             }
         }
     });

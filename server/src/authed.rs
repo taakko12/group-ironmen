@@ -203,6 +203,25 @@ pub async fn get_wom_gains(
     Ok(web::Json(result))
 }
 
+#[get("/wom-boss-kc")]
+pub async fn get_wom_boss_kc(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<HashMap<String, HashMap<String, i64>>>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let member_names = db::get_group_member_names(&client, auth.group_id).await?;
+
+    let cache = wom::get_cached_wom_boss_kc();
+    let mut result = HashMap::new();
+    for member_name in member_names {
+        if let Some(kc) = cache.get(&member_name) {
+            result.insert(member_name, kc.clone());
+        }
+    }
+
+    Ok(web::Json(result))
+}
+
 #[post("/name-changes")]
 pub async fn add_name_change(
     auth: Authenticated,

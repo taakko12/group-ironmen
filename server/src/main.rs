@@ -96,6 +96,7 @@ async fn main() -> std::io::Result<()> {
             .service(authed::get_recent_bank_pings)
             .service(authed::add_name_change)
             .service(authed::get_wom_gains)
+            .service(authed::get_wom_boss_kc)
             .service(authed::get_collection_log);
         let json_config = web::JsonConfig::default().limit(100000);
         let cors = Cors::default()

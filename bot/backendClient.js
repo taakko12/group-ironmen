@@ -57,4 +57,27 @@ function getGroupMembers() {
   return get(`/get-group-data?from_time=${encodeURIComponent(new Date(0).toISOString())}`);
 }
 
-module.exports = { postLootDrop, postDeath, postStorageLog, getLootData, getDeathData, getGroupMembers };
+// { member_name: { wom_boss_key: absolute_kill_count } } for every member,
+// used for dry-streak math -- this is absolute KC, not a delta over a period
+// like getWomGains would be if we had one.
+function getBossKc() {
+  return get('/wom-boss-kc');
+}
+
+// period must be one of the backend's SkillDataPeriod enum variant names
+// exactly as spelled ("Day" | "Week" | "Month" | "Year") -- serde's default
+// derive is case-sensitive on the Rust identifier, not lowercase.
+function getWomGains(period) {
+  return get(`/wom-gains?period=${encodeURIComponent(period)}`);
+}
+
+module.exports = {
+  postLootDrop,
+  postDeath,
+  postStorageLog,
+  getLootData,
+  getDeathData,
+  getGroupMembers,
+  getBossKc,
+  getWomGains,
+};
