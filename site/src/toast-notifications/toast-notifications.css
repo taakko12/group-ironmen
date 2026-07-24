@@ -112,30 +112,13 @@ toast-notifications {
 .toast-notifications__title {
   font-size: 1.15em;
   font-weight: 600;
-  color: var(--orange);
+  color: var(--yellow);
   white-space: normal;
   overflow-wrap: break-word;
 }
 
-.toast-notifications__toast--death .toast-notifications__title {
-  color: #e07a6c;
-}
-
 .toast-notifications__toast--bank .toast-notifications__title {
-  color: #8fb3d9;
   font-size: 1.02em;
-}
-
-.toast-notifications__toast--storage-deposit .toast-notifications__title {
-  color: #7bd68a;
-}
-
-.toast-notifications__toast--storage-withdraw .toast-notifications__title {
-  color: #e08b7c;
-}
-
-.toast-notifications__toast--storage-mixed .toast-notifications__title {
-  color: #d9c26a;
 }
 
 .toast-notifications__body {

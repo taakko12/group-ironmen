@@ -37,21 +37,42 @@ export class ToastNotifications extends BaseElement {
     this.seenDeaths = new Set();
     this.seenBankPings = new Set();
     this.seenStorageLog = new Set();
-    this.cursor = this.loadCursor();
+    const cursor = this.loadCursor();
+    this.cursorTime = cursor.time;
+    this.cursorKeys = cursor.keys;
 
     this.subscribeOnce("get-group-data", this.start.bind(this));
   }
 
+  // The cursor is a (time, keys-seen-at-exactly-that-time) pair rather than
+  // just a bare timestamp. A single Dink message can post several storage-log
+  // items sequentially, each landing in the DB at a different instant but
+  // sharing the same source timestamp -- with a bare-timestamp cursor, the
+  // first item to be seen advances the cursor to that timestamp, then any
+  // sibling item spotted on a *later* poll (arrived in the DB after, but
+  // stamped with the same time) fails a strict `t > cursor` check and is
+  // silently dropped forever. Tracking which keys already cleared the cursor
+  // at its current timestamp lets same-timestamp siblings still get through.
   loadCursor() {
     const stored = window.localStorage.getItem(CURSOR_STORAGE_KEY);
     const now = Date.now();
     if (stored) {
-      const storedTime = new Date(stored).getTime();
-      if (!isNaN(storedTime) && now - storedTime < MAX_CATCHUP_MS) {
-        return storedTime;
+      try {
+        const parsed = JSON.parse(stored);
+        const storedTime = new Date(parsed.time).getTime();
+        if (!isNaN(storedTime) && now - storedTime < MAX_CATCHUP_MS) {
+          return { time: storedTime, keys: new Set(parsed.keys ?? []) };
+        }
+      } catch {
+        // Fall through to legacy/invalid formats below.
+      }
+      // Legacy format from before the cursor tracked keys: a bare ISO string.
+      const legacyTime = new Date(stored).getTime();
+      if (!isNaN(legacyTime) && now - legacyTime < MAX_CATCHUP_MS) {
+        return { time: legacyTime, keys: new Set() };
       }
     }
-    return now;
+    return { time: now, keys: new Set() };
   }
 
   disconnectedCallback() {
@@ -77,25 +98,38 @@ export class ToastNotifications extends BaseElement {
       ]);
       // Held fixed for this whole poll so every entry is compared against
       // the same starting point, then becomes the new cursor once done.
-      this.pendingCursor = this.cursor;
+      this.pendingCursorTime = this.cursorTime;
+      this.pendingCursorKeys = new Set(this.cursorKeys);
       this.processLoot(lootData);
       this.processDeaths(deathData);
       this.processBankPings(bankPings);
       this.processStorageLog(storageLog);
-      this.cursor = this.pendingCursor;
-      window.localStorage.setItem(CURSOR_STORAGE_KEY, new Date(this.cursor).toISOString());
+      this.cursorTime = this.pendingCursorTime;
+      this.cursorKeys = this.pendingCursorKeys;
+      window.localStorage.setItem(
+        CURSOR_STORAGE_KEY,
+        JSON.stringify({ time: new Date(this.cursorTime).toISOString(), keys: [...this.cursorKeys] })
+      );
     } catch (err) {
       console.error("[toast-notifications] poll failed", err);
     }
   }
 
-  // True if `timeStr` is newer than the cursor as of the start of this poll
-  // (so it should toast); always advances pendingCursor so the next poll's
-  // cursor covers everything seen in this one, toasted or not.
-  isNewSinceCursor(timeStr) {
+  // True if `timeStr`/`key` is newer than the cursor as of the start of this
+  // poll (so it should toast); always advances the pending cursor so the
+  // next poll's cursor covers everything seen in this one, toasted or not.
+  isNewSinceCursor(timeStr, key) {
     const t = new Date(timeStr).getTime();
-    if (t > this.pendingCursor) this.pendingCursor = t;
-    return t > this.cursor;
+    const isNew = t > this.cursorTime || (t === this.cursorTime && !this.cursorKeys.has(key));
+
+    if (t > this.pendingCursorTime) {
+      this.pendingCursorTime = t;
+      this.pendingCursorKeys = new Set([key]);
+    } else if (t === this.pendingCursorTime) {
+      this.pendingCursorKeys.add(key);
+    }
+
+    return isNew;
   }
 
   processLoot(lootData) {
@@ -104,7 +138,7 @@ export class ToastNotifications extends BaseElement {
         const key = `${member.name}|${drop.item_name}|${drop.gp_value}|${drop.time}`;
         if (this.seenLoot.has(key)) continue;
         this.seenLoot.add(key);
-        if (this.isNewSinceCursor(drop.time)) this.showLootToast(member.name, drop);
+        if (this.isNewSinceCursor(drop.time, key)) this.showLootToast(member.name, drop);
       }
     }
   }
@@ -115,7 +149,7 @@ export class ToastNotifications extends BaseElement {
         const key = `${member.name}|${death.time}`;
         if (this.seenDeaths.has(key)) continue;
         this.seenDeaths.add(key);
-        if (this.isNewSinceCursor(death.time)) this.showDeathToast(member.name, death);
+        if (this.isNewSinceCursor(death.time, key)) this.showDeathToast(member.name, death);
       }
     }
   }
@@ -125,7 +159,7 @@ export class ToastNotifications extends BaseElement {
       const key = `${ping.member_name}|${ping.item_id}|${ping.reason}|${ping.created_at}`;
       if (this.seenBankPings.has(key)) continue;
       this.seenBankPings.add(key);
-      if (this.isNewSinceCursor(ping.created_at)) this.showBankPingToast(ping);
+      if (this.isNewSinceCursor(ping.created_at, key)) this.showBankPingToast(ping);
     }
   }
 
@@ -139,7 +173,7 @@ export class ToastNotifications extends BaseElement {
       const key = `${entry.member_name}|${entry.item_name}|${entry.quantity}|${entry.action}|${entry.time}`;
       if (this.seenStorageLog.has(key)) continue;
       this.seenStorageLog.add(key);
-      if (this.isNewSinceCursor(entry.time)) newEntries.push(entry);
+      if (this.isNewSinceCursor(entry.time, key)) newEntries.push(entry);
     }
     if (newEntries.length === 0) return;
 
