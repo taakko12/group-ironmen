@@ -1,6 +1,7 @@
 import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
 import { Item } from "../data/item";
+import { utility } from "../utility";
 
 const POLL_INTERVAL_MS = 2000;
 const AUTO_DISMISS_MS = 9000;
@@ -276,7 +277,7 @@ ${mediaHtml}
     // Dismiss is a sibling of the link (not nested inside it) so it never
     // triggers the link's navigation when clicked.
     const linkHtml = link
-      ? `<a class="toast-notifications__link" href="${link}" target="_blank" rel="noopener">${linkContent}</a>`
+      ? `<a class="toast-notifications__link" href="${utility.discordAppLink(link)}" target="_blank" rel="noopener">${linkContent}</a>`
       : `<div class="toast-notifications__link">${linkContent}</div>`;
 
     const toastEl = document.createElement("div");

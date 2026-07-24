@@ -98,6 +98,17 @@ class Utility {
   removeTags(s) {
     return s?.replace(this.tagRegexp, "");
   }
+
+  // Discord message links are stored/displayed as https://discord.com/... so
+  // they're plain readable URLs, but clicking that in a browser just opens
+  // discord.com in a new tab instead of the desktop/mobile app. Discord's
+  // own discord:// URI scheme is what actually deep-links into the native
+  // app, so swap the prefix at render time rather than changing what's
+  // stored.
+  discordAppLink(messageLink) {
+    if (!messageLink) return messageLink;
+    return messageLink.replace("https://discord.com/", "discord://-/");
+  }
 }
 const utility = new Utility();
 

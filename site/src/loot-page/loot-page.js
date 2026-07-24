@@ -1,6 +1,7 @@
 /* global Chart */
 import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
+import { utility } from "../utility";
 
 export class LootPage extends BaseElement {
   constructor() {
@@ -123,7 +124,7 @@ export class LootPage extends BaseElement {
   static logRowHtml(entry) {
     const time = new Date(entry.time).toLocaleString();
     const itemCell = entry.message_link
-      ? `<a href="${entry.message_link}" target="_blank" rel="noopener">${entry.item_name}</a>`
+      ? `<a href="${utility.discordAppLink(entry.message_link)}" target="_blank" rel="noopener">${entry.item_name}</a>`
       : entry.item_name;
 
     return `
@@ -199,7 +200,7 @@ export class LootPage extends BaseElement {
     const label = `${drop.item_name} (${drop.gp_value.toLocaleString()} gp)`;
     const content = `${img}<span>${label}</span>`;
     return drop.message_link
-      ? `<a class="loot-page__recent-link" href="${drop.message_link}" target="_blank" rel="noopener">${content}</a>`
+      ? `<a class="loot-page__recent-link" href="${utility.discordAppLink(drop.message_link)}" target="_blank" rel="noopener">${content}</a>`
       : `<span class="loot-page__recent-link">${content}</span>`;
   }
 

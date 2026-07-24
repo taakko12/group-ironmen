@@ -1,5 +1,6 @@
 import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
+import { utility } from "../utility";
 
 export class DeathPage extends BaseElement {
   constructor() {
@@ -114,7 +115,7 @@ export class DeathPage extends BaseElement {
     const label = new Date(death.time).toLocaleString();
     const content = `${img}<span>${label}</span>`;
     return death.message_link
-      ? `<a class="death-page__recent-link" href="${death.message_link}" target="_blank" rel="noopener">${content}</a>`
+      ? `<a class="death-page__recent-link" href="${utility.discordAppLink(death.message_link)}" target="_blank" rel="noopener">${content}</a>`
       : `<span class="death-page__recent-link">${content}</span>`;
   }
 }
