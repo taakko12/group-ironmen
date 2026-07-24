@@ -1,11 +1,13 @@
 // Makes the bot occasionally chime in on regular chat (not Dink webhook
 // messages) with an LLM-generated in-character reply -- either when directly
-// @mentioned, or at random on a small per-message chance. Uses Gemini's free
+// @mentioned, or at random on a small per-message chance. Uses Groq's free
 // API tier since this only ever fires a handful of times a day in a small
-// server, nowhere near free-tier rate limits.
+// server, nowhere near free-tier rate limits. (Gemini's free tier grants 0
+// quota on some projects/regions regardless of actual usage -- Groq doesn't
+// have that issue.)
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const TRIGGER_CHANCE = Number(process.env.PERSONALITY_TRIGGER_CHANCE ?? 0.07);
 const COOLDOWN_MS = Number(process.env.PERSONALITY_COOLDOWN_MS ?? 30 * 1000);
 // Comma-separated channel IDs to allow this in; unset means every channel
@@ -42,31 +44,35 @@ function pushHistory(channelId, author, content) {
 
 async function generateReply(channelId) {
   const history = (recentByChannel.get(channelId) ?? []).join('\n');
-  const prompt = `${SYSTEM_PROMPT}\n\nRecent chat:\n${history}\n\nReply in character with a single short message.`;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 120, temperature: 1.0 },
-      }),
-    }
-  );
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `Recent chat:\n${history}\n\nReply in character with a single short message.` },
+      ],
+      max_tokens: 120,
+      temperature: 1.0,
+    }),
+  });
   if (!response.ok) {
-    throw new Error(`Gemini API returned ${response.status}: ${await response.text()}`);
+    throw new Error(`Groq API returned ${response.status}: ${await response.text()}`);
   }
   const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = data.choices?.[0]?.message?.content;
   return text ? text.trim() : null;
 }
 
 async function maybeReply(message) {
   pushHistory(message.channelId, message.author.username, message.content);
 
-  if (!GEMINI_API_KEY) return;
+  if (!GROQ_API_KEY) return;
   if (ALLOWED_CHANNEL_IDS && !ALLOWED_CHANNEL_IDS.has(message.channelId)) return;
 
   const mentioned = message.mentions.has(message.client.user);
