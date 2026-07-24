@@ -12,7 +12,17 @@ const { buildLootLeaderboard, buildDeathLeaderboard } = require('./leaderboard')
 const { getDryStreak } = require('./dryStreak');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+// Deliberately its own model/quota, separate from personality.js's GROQ_MODEL
+// (used for ambient chat and the in-character restyle below). Groq tracks
+// rate limits per model, and this tool-calling loop is the heaviest consumer
+// in the bot -- every round resends the growing message history plus the
+// full tool schema -- so sharing the 70b model's daily token budget with the
+// high-frequency ambient chat was the direct cause of hitting its 100k TPD
+// cap. Tool selection/fact-gathering doesn't need the bigger model's nuance,
+// just reliable function calling, which the smaller instant model still
+// does (and the tool_use_failed retry-without-tools fallback below still
+// covers it if it doesn't).
+const GROQ_TOOLS_MODEL = process.env.GROQ_TOOLS_MODEL || 'llama-3.1-8b-instant';
 const MAX_TOOL_ROUNDS = 4;
 const SHARED_MEMBER_NAME = '@SHARED';
 
@@ -145,7 +155,7 @@ async function callGroqWithTools(messages, { allowTools = true } = {}) {
       Authorization: `Bearer ${GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: GROQ_MODEL,
+      model: GROQ_TOOLS_MODEL,
       messages,
       ...(allowTools ? { tools, tool_choice: 'auto' } : {}),
       max_tokens: 400,
