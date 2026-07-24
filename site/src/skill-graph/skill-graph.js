@@ -17,6 +17,7 @@ export class SkillGraph extends BaseElement {
     this.skillName = this.getAttribute("skill-name");
     this.render();
     this.tableContainer = this.querySelector(".skill-graph__table-container");
+    this.memberFiltersContainer = this.querySelector(".skill-graph__member-filters");
     this.ctx = this.querySelector("canvas").getContext("2d");
 
     this.subscribeOnce("get-group-data", this.create.bind(this));
@@ -37,6 +38,7 @@ export class SkillGraph extends BaseElement {
 
     this.createChart(dataSets);
     this.createTable(dataSets);
+    this.createMemberFilters(dataSets);
   }
 
   tableDataForDataSet(dataSet) {
@@ -120,6 +122,63 @@ export class SkillGraph extends BaseElement {
 `;
   }
 
+  // A per-member checkbox to show/hide that member's line on the chart,
+  // plus show-all/hide-all shortcuts. Chart.js's own default legend already
+  // renders above the chart, but it's a plain label, not an interactive
+  // toggle -- this is deliberately separate, dedicated UI rather than trying
+  // to wire up click handling on the legend itself.
+  createMemberFilters(dataSets) {
+    const filters = dataSets
+      .map((dataSet, index) => {
+        const id = `skill-graph-member-filter-${this.skillName}-${index}`;
+        return `
+<span class="skill-graph__member-filter">
+  <input type="checkbox" id="${id}" data-dataset-index="${index}" checked />
+  <label for="${id}">
+    <span class="skill-graph__member-filter-swatch" style="background: ${dataSet.borderColor}"></span>
+    ${dataSet.label}
+  </label>
+</span>
+`;
+      })
+      .join("");
+
+    this.memberFiltersContainer.innerHTML = `
+${filters}
+<button type="button" class="skill-graph__member-filter-all men-button small">Show all</button>
+<button type="button" class="skill-graph__member-filter-none men-button small">Hide all</button>
+`;
+
+    for (const checkbox of this.memberFiltersContainer.querySelectorAll("input[type=checkbox]")) {
+      this.eventListener(checkbox, "change", this.handleMemberFilterChange.bind(this));
+    }
+    this.eventListener(
+      this.memberFiltersContainer.querySelector(".skill-graph__member-filter-all"),
+      "click",
+      () => this.setAllMembersVisible(true)
+    );
+    this.eventListener(
+      this.memberFiltersContainer.querySelector(".skill-graph__member-filter-none"),
+      "click",
+      () => this.setAllMembersVisible(false)
+    );
+  }
+
+  handleMemberFilterChange(event) {
+    const index = Number(event.currentTarget.dataset.datasetIndex);
+    this.chart.setDatasetVisibility(index, event.currentTarget.checked);
+    this.chart.update();
+  }
+
+  setAllMembersVisible(visible) {
+    const checkboxes = this.memberFiltersContainer.querySelectorAll("input[type=checkbox]");
+    checkboxes.forEach((checkbox, index) => {
+      checkbox.checked = visible;
+      this.chart.setDatasetVisibility(index, visible);
+    });
+    this.chart.update();
+  }
+
   createChart(dataSets) {
     if (this.chart) this.chart.destroy();
 
@@ -170,6 +229,13 @@ export class SkillGraph extends BaseElement {
           title: {
             display: true,
             text: `${this.skillName} - ${this.period}`,
+          },
+          // Replaced by the per-member checkbox filters below the chart --
+          // Chart.js's default legend shows the same name/color mapping but
+          // isn't an interactive toggle, so keeping both was just duplicated
+          // information.
+          legend: {
+            display: false,
           },
         },
         interaction: {
