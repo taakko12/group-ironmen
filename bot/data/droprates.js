@@ -239,6 +239,211 @@ module.exports = {
     displayName: 'Deranged Archaeologist',
     uniques: [{ name: 'Steel ring', rate: 43.7 }],
   },
+  doom_of_mokhaiotl: {
+    displayName: 'Doom of Mokhaiotl',
+    uniques: [
+      {
+        name: 'Dom',
+        rate: 250,
+        note: 'rate improves with delve depth (1/1,000 at delve 6 up to 1/250 at delve 9+) -- this uses the best-case rate',
+      },
+      {
+        name: 'Avernic treads',
+        rate: 540,
+        note: 'rate improves with delve depth (1/1,350 at delve 4 up to 1/540 at delve 9+) -- this uses the best-case rate',
+      },
+      {
+        name: 'Eye of ayak (uncharged)',
+        rate: 540,
+        note: 'rate improves with delve depth (1/2,000 at delve 3 up to 1/540 at delve 9+) -- this uses the best-case rate',
+      },
+      {
+        name: 'Mokhaiotl cloth',
+        rate: 540,
+        note: 'rate improves with delve depth (1/2,500 at delve 2 up to 1/540 at delve 9+) -- this uses the best-case rate',
+      },
+    ],
+  },
+  duke_sucellus: {
+    displayName: 'Duke Sucellus',
+    uniques: [
+      { name: 'Baron', rate: 2500 },
+      { name: 'Eye of the duke', rate: 720 },
+      { name: 'Virtus mask', rate: 2160 },
+      { name: 'Virtus robe top', rate: 2160 },
+      { name: 'Virtus robe bottom', rate: 2160 },
+      { name: 'Magus vestige', rate: 720 },
+      {
+        name: 'Ice quartz',
+        rate: 50,
+        note: 'ramps up from ~1/200 toward 1/50 over your first ~300 kills without one -- this uses the settled rate',
+      },
+      {
+        name: 'Frozen tablet',
+        rate: 25.8,
+        note: 'gets more common the longer you go without one -- this uses an approximate settled rate',
+      },
+      { name: 'Chromium ingot', rate: 240 },
+      { name: "Awakener's orb", rate: 48.5 },
+    ],
+  },
+  tztok_jad: {
+    displayName: 'The Fight Caves (TzTok-Jad)',
+    uniques: [
+      {
+        name: 'Tzrek-jad',
+        rate: 200,
+        note: '1/100 instead if done on a Slayer task; can also trade in a fire cape for another 1/200 shot',
+      },
+      { name: 'Fire cape', rate: 1, note: 'guaranteed for clearing the Fight Caves, not a random drop' },
+    ],
+  },
+  tzkal_zuk: {
+    displayName: 'The Inferno (TzKal-Zuk)',
+    uniques: [
+      {
+        name: 'Jal-nib-rek',
+        rate: 100,
+        note: '1/75 instead on a TzHaar Slayer task; trading in old infernal capes gives extra shots',
+      },
+      { name: 'Infernal cape', rate: 1, note: 'guaranteed for clearing the Inferno, not a random drop' },
+    ],
+  },
+  sol_heredit: {
+    displayName: 'Sol Heredit (Fortis Colosseum)',
+    uniques: [
+      {
+        name: 'Smol heredit',
+        rate: 200,
+        note: 'obtained by trading a Dizana\'s quiver to Minimus for an extra 1/200 shot -- the wiki gives no other clean flat rate for it or the armour pieces (they scale up per wave cleared from wave 4 onward), so treat this whole entry loosely',
+      },
+    ],
+  },
+  the_gauntlet: {
+    displayName: 'The Gauntlet',
+    uniques: [
+      { name: 'Youngllef', rate: 2000 },
+      { name: 'Crystal armour seed', rate: 120 },
+      { name: 'Crystal weapon seed', rate: 120 },
+      { name: 'Enhanced crystal weapon seed', rate: 2000 },
+    ],
+  },
+  the_corrupted_gauntlet: {
+    displayName: 'The Corrupted Gauntlet',
+    uniques: [
+      { name: 'Youngllef', rate: 800 },
+      { name: 'Crystal armour seed', rate: 50 },
+      { name: 'Crystal weapon seed', rate: 50 },
+      { name: 'Enhanced crystal weapon seed', rate: 400 },
+      { name: 'Gauntlet cape', rate: 1, note: 'guaranteed on completion, not a random drop' },
+    ],
+  },
+  general_graardor: {
+    displayName: 'General Graardor',
+    uniques: [
+      { name: 'Pet general graardor', rate: 5000 },
+      { name: 'Bandos chestplate', rate: 381 },
+      { name: 'Bandos tassets', rate: 381 },
+      { name: 'Bandos boots', rate: 381 },
+      { name: 'Bandos hilt', rate: 508 },
+      { name: 'Godsword shard 1', rate: 762 },
+      { name: 'Godsword shard 2', rate: 762 },
+      { name: 'Godsword shard 3', rate: 762 },
+    ],
+  },
+  giant_mole: {
+    displayName: 'Giant Mole',
+    uniques: [
+      { name: 'Baby mole', rate: 3000 },
+      { name: 'Immaculate mole skin', rate: 50 },
+    ],
+  },
+  grotesque_guardians: {
+    displayName: 'Grotesque Guardians',
+    uniques: [
+      { name: 'Noon', rate: 3000 },
+      { name: 'Jar of stone', rate: 5000 },
+      { name: 'Black tourmaline core', rate: 500 },
+      { name: 'Granite gloves', rate: 250 },
+      { name: 'Granite ring', rate: 250 },
+      { name: 'Granite hammer', rate: 375 },
+    ],
+  },
+  hespori: {
+    displayName: 'Hespori',
+    uniques: [
+      { name: 'Bottomless compost bucket', rate: 35 },
+      { name: 'Iasor seed', rate: 3 },
+      { name: 'Kronos seed', rate: 3 },
+      { name: 'Attas seed', rate: 3 },
+    ],
+  },
+  the_hueycoatl: {
+    displayName: 'The Hueycoatl',
+    uniques: [
+      { name: 'Huberte', rate: 400, note: 'rate scales with your personal contribution to the kill' },
+      { name: 'Dragon hunter wand', rate: 105 },
+      { name: 'Tome of earth (empty)', rate: 90 },
+      { name: 'Soiled page', rate: 13.6 },
+      { name: 'Hueycoatl hide', rate: 28.6, note: 'drops 3 at a time when rolled' },
+      { name: 'Huasca seed', rate: 34 },
+    ],
+  },
+  kalphite_queen: {
+    displayName: 'Kalphite Queen',
+    uniques: [
+      { name: 'Kalphite princess', rate: 3000 },
+      { name: 'Kq head', rate: 128 },
+      { name: 'Jar of sand', rate: 2000 },
+      { name: 'Dragon 2h sword', rate: 256 },
+      { name: 'Dragon chainbody', rate: 128 },
+      { name: 'Dragon pickaxe', rate: 400 },
+    ],
+  },
+  king_black_dragon: {
+    displayName: 'King Black Dragon',
+    uniques: [
+      { name: 'Prince black dragon', rate: 3000 },
+      { name: 'Kbd heads', rate: 128 },
+      { name: 'Dragon pickaxe', rate: 1000 },
+      { name: 'Draconic visage', rate: 5000 },
+    ],
+  },
+  kraken: {
+    displayName: 'Kraken',
+    uniques: [
+      { name: 'Pet kraken', rate: 3000 },
+      { name: 'Kraken tentacle', rate: 400 },
+      { name: 'Trident of the seas (full)', rate: 512 },
+      { name: 'Jar of dirt', rate: 1000 },
+    ],
+  },
+  kreearra: {
+    displayName: "Kree'arra",
+    uniques: [
+      { name: "Pet kree'arra", rate: 5000 },
+      { name: 'Armadyl helmet', rate: 381 },
+      { name: 'Armadyl chestplate', rate: 381 },
+      { name: 'Armadyl chainskirt', rate: 381 },
+      { name: 'Armadyl hilt', rate: 508 },
+      { name: 'Godsword shard 1', rate: 762 },
+      { name: 'Godsword shard 2', rate: 762 },
+      { name: 'Godsword shard 3', rate: 762 },
+    ],
+  },
+  kril_tsutsaroth: {
+    displayName: "K'ril Tsutsaroth",
+    uniques: [
+      { name: "Pet k'ril tsutsaroth", rate: 5000 },
+      { name: 'Staff of the dead', rate: 508 },
+      { name: 'Zamorakian spear', rate: 127 },
+      { name: 'Steam battlestaff', rate: 127 },
+      { name: 'Zamorak hilt', rate: 508 },
+      { name: 'Godsword shard 1', rate: 762 },
+      { name: 'Godsword shard 2', rate: 762 },
+      { name: 'Godsword shard 3', rate: 762 },
+    ],
+  },
   yama: {
     displayName: 'Yama',
     uniques: [
