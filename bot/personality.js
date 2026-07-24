@@ -6,6 +6,8 @@
 // quota on some projects/regions regardless of actual usage -- Groq doesn't
 // have that issue.)
 
+const { getRsnForDiscordId } = require('./memberCache');
+
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const TRIGGER_CHANCE = Number(process.env.PERSONALITY_TRIGGER_CHANCE ?? 0.07);
@@ -92,7 +94,12 @@ async function generateBankPingLine(context) {
 // assistant.js instead (see index.js), since those are real questions with
 // tool access rather than vibes off recent chat.
 async function maybeReply(message) {
-  pushHistory(message.channelId, message.author.username, message.content);
+  // Discord usernames don't reliably match RSNs, and the personality's traits
+  // (see SYSTEM_PROMPT) are written in terms of RSNs -- resolve the actual
+  // linked RSN so the model knows who really said what instead of latching
+  // onto a raw Discord username it has no way to place, or guessing.
+  const rsn = (await getRsnForDiscordId(message.author.id).catch(() => null)) ?? message.author.username;
+  pushHistory(message.channelId, rsn, message.content);
 
   if (!GROQ_API_KEY) return;
   if (ALLOWED_CHANNEL_IDS && !ALLOWED_CHANNEL_IDS.has(message.channelId)) return;

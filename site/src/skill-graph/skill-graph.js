@@ -95,7 +95,10 @@ export class SkillGraph extends BaseElement {
     };
 
     let tableRows = [];
-    for (const [name, x] of Object.entries(tableData)) {
+    const memberEntriesSortedByXpGain = Object.entries(tableData).sort(
+      (a, b) => b[1][this.skillName].xpGain - a[1][this.skillName].xpGain
+    );
+    for (const [name, x] of memberEntriesSortedByXpGain) {
       const totalXpGain = x[this.skillName].totalXpGain;
       tableRows.push(row("", name, x[this.skillName], totalXpGain));
 

@@ -7,23 +7,11 @@
 // model request against the free tier.
 
 const { SYSTEM_PROMPT } = require('./personality');
-const { getGroupMembers } = require('./backendClient');
+const { getDiscordId } = require('./memberCache');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
 const ROAST_CHANCE = Number(process.env.DEATH_ROAST_CHANCE ?? 0.3);
-
-const MEMBERS_CACHE_MS = 5 * 60 * 1000;
-let membersCache = null;
-let membersCacheAt = 0;
-
-async function getDiscordId(memberName) {
-  if (!membersCache || Date.now() - membersCacheAt > MEMBERS_CACHE_MS) {
-    membersCache = await getGroupMembers();
-    membersCacheAt = Date.now();
-  }
-  return membersCache.find((member) => member.name === memberName)?.discord_id ?? null;
-}
 
 async function generateRoast(imageUrl) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
