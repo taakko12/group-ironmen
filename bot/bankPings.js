@@ -3,6 +3,7 @@
 // logic (see server/src/db.rs poll_bank_pings) -- this is purely Discord I/O.
 
 const { getItemName } = require('./itemData');
+const { generateBankPingLine } = require('./personality');
 
 const POLL_INTERVAL_MS = 10 * 1000;
 
@@ -37,10 +38,16 @@ async function pollOnce(client) {
       continue;
     }
     const itemName = getItemName(ping.item_id);
-    const message =
-      ping.reason === 'manual'
-        ? `📢 <@${ping.discord_id}> someone requested you bank your **${itemName}**!`
-        : `⚠️ <@${ping.discord_id}> you went offline holding **${itemName}** — please bank it!`;
+    const isManual = ping.reason === 'manual';
+    const context = isManual
+      ? `A group member asked ${ping.member_name} to bank their ${itemName}. Write one short in-character line telling them to do it.`
+      : `${ping.member_name} logged off while still holding ${itemName} instead of banking it. Write one short in-character line calling them out for it.`;
+    const fallback = isManual
+      ? `someone requested you bank your **${itemName}**!`
+      : `you went offline holding **${itemName}** — please bank it!`;
+
+    const line = await generateBankPingLine(context);
+    const message = `${isManual ? '📢' : '⚠️'} <@${ping.discord_id}> ${line ?? fallback}`;
     await channel.send(message).catch((err) => console.error(`[bankPings] Failed to send message: ${err.message}`));
   }
 }

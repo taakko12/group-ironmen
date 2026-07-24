@@ -41,9 +41,7 @@ function pushHistory(channelId, author, content) {
   recentByChannel.set(channelId, list);
 }
 
-async function generateReply(channelId) {
-  const history = (recentByChannel.get(channelId) ?? []).join('\n');
-
+async function callGroq(userContent) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -54,7 +52,7 @@ async function generateReply(channelId) {
       model: GROQ_MODEL,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Recent chat:\n${history}\n\nReply in character with a single short message.` },
+        { role: 'user', content: userContent },
       ],
       max_tokens: 120,
       temperature: 1.0,
@@ -66,6 +64,26 @@ async function generateReply(channelId) {
   const data = await response.json();
   const text = data.choices?.[0]?.message?.content;
   return text ? text.trim() : null;
+}
+
+async function generateReply(channelId) {
+  const history = (recentByChannel.get(channelId) ?? []).join('\n');
+  return callGroq(`Recent chat:\n${history}\n\nReply in character with a single short message.`);
+}
+
+// Used by bankPings.js so "someone asked you to bank an item" / "you went
+// offline holding an item" pings come from the bot's own voice instead of a
+// flat template. Callers should fall back to their own plain-text message
+// when this returns null (no key configured, or the API call failed) since
+// those pings are functional alerts that still need to go out either way.
+async function generateBankPingLine(context) {
+  if (!GROQ_API_KEY) return null;
+  try {
+    return await callGroq(context);
+  } catch (err) {
+    console.error(`[personality] Failed to generate bank ping line: ${err.message}`);
+    return null;
+  }
 }
 
 async function maybeReply(message) {
@@ -92,4 +110,4 @@ async function maybeReply(message) {
   }
 }
 
-module.exports = { maybeReply, SYSTEM_PROMPT };
+module.exports = { maybeReply, SYSTEM_PROMPT, generateBankPingLine };
