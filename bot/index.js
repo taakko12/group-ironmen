@@ -63,7 +63,7 @@ client.on('messageCreate', async (message) => {
   // Dink posts via a Discord webhook, not a bot user account
   if (message.webhookId) {
     if (DEATH_CHANNEL_ID && message.channelId === DEATH_CHANNEL_ID) {
-      await processDeathMessage(message);
+      await processDeathMessage(message, { roast: true });
     }
 
     if (LOOT_CHANNEL_ID && message.channelId === LOOT_CHANNEL_ID) {

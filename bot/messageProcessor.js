@@ -15,24 +15,35 @@ const {
 } = require('./dinkParser');
 const { postLootDrop, postDeath, postStorageLog } = require('./backendClient');
 const { getItemId } = require('./itemData');
+const { maybeRoastDeath } = require('./deathRoast');
 
 function messageLink(message) {
   return `https://discord.com/channels/${message.guildId}/${message.channelId}/${message.id}`;
 }
 
-async function processDeathMessage(message) {
+// roast=true only for live messages (see index.js) -- /scrape backfills
+// hundreds of historical deaths at once and shouldn't replay roasts for
+// deaths that happened long ago.
+async function processDeathMessage(message, { roast = false } = {}) {
   const memberName = parseDeathMessage(message);
   if (!memberName) return 0;
+
+  const imageUrl = parseDeathImage(message);
 
   try {
     await postDeath({
       member_name: memberName,
-      image_url: parseDeathImage(message),
+      image_url: imageUrl,
       message_link: messageLink(message),
       discord_message_id: message.id,
       time: message.createdAt.toISOString(),
     });
     console.log(`[death] Recorded death for "${memberName}"`);
+    if (roast) {
+      // Fire-and-forget: maybeRoastDeath handles its own errors, and death
+      // recording shouldn't wait on an LLM round-trip to complete.
+      maybeRoastDeath(message, { member_name: memberName, image_url: imageUrl });
+    }
     return 1;
   } catch (err) {
     console.error(`[death] Failed to record death for "${memberName}": ${err.message}`);

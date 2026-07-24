@@ -92,4 +92,4 @@ async function maybeReply(message) {
   }
 }
 
-module.exports = { maybeReply };
+module.exports = { maybeReply, SYSTEM_PROMPT };
