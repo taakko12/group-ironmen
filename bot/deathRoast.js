@@ -11,7 +11,9 @@ const { getGroupMembers } = require('./backendClient');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
-const ROAST_CHANCE = Number(process.env.DEATH_ROAST_CHANCE ?? 0.1);
+// ponytail: temporarily defaulted to 1 (100%) for testing at the user's
+// request -- dial back to ~0.2-0.4 once confirmed working.
+const ROAST_CHANCE = Number(process.env.DEATH_ROAST_CHANCE ?? 1);
 
 const MEMBERS_CACHE_MS = 5 * 60 * 1000;
 let membersCache = null;
