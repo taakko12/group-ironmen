@@ -20,6 +20,16 @@ async function post(path, body) {
   }
 }
 
+async function get(path) {
+  const response = await fetch(`${BACKEND_URL}/api/group/${GROUP_NAME}${path}`, {
+    headers: { Authorization: GROUP_TOKEN },
+  });
+  if (!response.ok) {
+    throw new Error(`${path} returned ${response.status}: ${await response.text()}`);
+  }
+  return response.json();
+}
+
 function postLootDrop(drop) {
   return post('/loot-drop', drop);
 }
@@ -32,4 +42,12 @@ function postStorageLog(entry) {
   return post('/storage-log', entry);
 }
 
-module.exports = { postLootDrop, postDeath, postStorageLog };
+function getLootData() {
+  return get('/get-loot-data');
+}
+
+function getDeathData() {
+  return get('/get-death-data');
+}
+
+module.exports = { postLootDrop, postDeath, postStorageLog, getLootData, getDeathData };

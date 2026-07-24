@@ -40,4 +40,4 @@ function getItemId(name) {
   return itemIds.get(normalizeItemName(name)) ?? null;
 }
 
-module.exports = { start, getItemName, getItemId };
+module.exports = { start, getItemName, getItemId, SITE_URL };
