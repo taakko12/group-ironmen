@@ -75,6 +75,10 @@ toast-notifications {
   border-color: #d9533f;
 }
 
+.toast-notifications__toast--storage-mixed {
+  border-color: #c9a227;
+}
+
 .toast-notifications__link {
   display: flex;
   flex-direction: column;
@@ -130,11 +134,33 @@ toast-notifications {
   color: #e08b7c;
 }
 
+.toast-notifications__toast--storage-mixed .toast-notifications__title {
+  color: #d9c26a;
+}
+
 .toast-notifications__body {
+  width: 100%;
   font-size: 1em;
   opacity: 0.85;
   white-space: normal;
   overflow-wrap: break-word;
+  text-align: left;
+}
+
+.toast-notifications__line {
+  padding: 2px 0;
+}
+
+.toast-notifications__line:first-child {
+  padding-top: 0;
+}
+
+.toast-notifications__line--deposit {
+  color: #7bd68a;
+}
+
+.toast-notifications__line--withdraw {
+  color: #e08b7c;
 }
 
 .toast-notifications__dismiss {

@@ -129,12 +129,28 @@ export class ToastNotifications extends BaseElement {
     }
   }
 
+  // Dink bundles an entire deposit/withdrawal transaction's line items into
+  // one Discord message, but we log one storage_log row per item -- group
+  // them back into one toast per transaction (by message_link, since every
+  // item from the same message shares it) instead of one toast per item.
   processStorageLog(storageLog) {
+    const newEntries = [];
     for (const entry of storageLog) {
       const key = `${entry.member_name}|${entry.item_name}|${entry.quantity}|${entry.action}|${entry.time}`;
       if (this.seenStorageLog.has(key)) continue;
       this.seenStorageLog.add(key);
-      if (this.isNewSinceCursor(entry.time)) this.showStorageLogToast(entry);
+      if (this.isNewSinceCursor(entry.time)) newEntries.push(entry);
+    }
+    if (newEntries.length === 0) return;
+
+    const groups = new Map();
+    for (const entry of newEntries) {
+      const groupKey = entry.message_link || `${entry.member_name}|${entry.action}|${entry.time}`;
+      if (!groups.has(groupKey)) groups.set(groupKey, []);
+      groups.get(groupKey).push(entry);
+    }
+    for (const entries of groups.values()) {
+      this.showStorageLogToast(entries);
     }
   }
 
@@ -173,17 +189,40 @@ export class ToastNotifications extends BaseElement {
     });
   }
 
-  showStorageLogToast(entry) {
-    const isDeposit = entry.action === "deposit";
-    const verb = isDeposit ? "deposited" : "withdrew";
-    const preposition = isDeposit ? "into" : "from";
-    const value = entry.gp_value ? ` (${entry.gp_value.toLocaleString()} gp)` : "";
+  showStorageLogToast(entries) {
+    const MAX_LINES = 6;
+    const first = entries[0];
+    const deposits = entries.filter((e) => e.action === "deposit");
+    const withdrawals = entries.filter((e) => e.action === "withdraw");
+
+    const lineHtml = (entry, sign, modifier) => {
+      const value = entry.gp_value ? ` (${entry.gp_value.toLocaleString()} gp)` : "";
+      return `<div class="toast-notifications__line toast-notifications__line--${modifier}">${sign} ${entry.quantity} x ${entry.item_name}${value}</div>`;
+    };
+
+    const listHtml = (list, sign, modifier) => {
+      const shown = list.slice(0, MAX_LINES).map((entry) => lineHtml(entry, sign, modifier));
+      if (list.length > MAX_LINES) {
+        shown.push(
+          `<div class="toast-notifications__line toast-notifications__line--${modifier}">+${
+            list.length - MAX_LINES
+          } more</div>`
+        );
+      }
+      return shown.join("");
+    };
+
+    const hasDeposits = deposits.length > 0;
+    const hasWithdrawals = withdrawals.length > 0;
+    const type = hasDeposits && !hasWithdrawals ? "storage-deposit" : !hasDeposits && hasWithdrawals ? "storage-withdraw" : "storage-mixed";
+    const verb = hasDeposits && hasWithdrawals ? "updated" : hasDeposits ? "deposited into" : "withdrew from";
+
     this.addToast({
-      type: isDeposit ? "storage-deposit" : "storage-withdraw",
+      type,
       icon: null,
-      title: `${entry.member_name} ${verb} ${preposition} shared storage`,
-      body: `${entry.quantity} x ${entry.item_name}${value}`,
-      link: entry.message_link,
+      title: `${first.member_name} ${verb} shared storage`,
+      body: `${listHtml(deposits, "+", "deposit")}${listHtml(withdrawals, "−", "withdraw")}`,
+      link: first.message_link,
     });
   }
 
@@ -215,15 +254,29 @@ ${mediaHtml}
     });
 
     this.container.prepend(toastEl);
-    // removeToast() removal is delayed (fade-out), so take a static snapshot
-    // rather than looping on the live (not-yet-shrunk) children collection.
-    const toasts = [...this.container.children];
-    for (let i = MAX_VISIBLE_TOASTS; i < toasts.length; i++) {
-      this.removeToast(toasts[i]);
-    }
+    this.scheduleEviction();
 
     requestAnimationFrame(() => toastEl.classList.add("toast-notifications__toast--visible"));
     toastEl.dismissTimeout = window.setTimeout(() => this.removeToast(toastEl), AUTO_DISMISS_MS);
+  }
+
+  // Several toasts can be added synchronously in one poll (e.g. a multi-item
+  // batch, or several people getting drops at once). Checking the cap after
+  // every single addition would evict most of that same burst before it's
+  // even rendered, so this coalesces to a single eviction pass per frame,
+  // after all of this poll's toasts have been added.
+  scheduleEviction() {
+    if (this.evictionScheduled) return;
+    this.evictionScheduled = true;
+    requestAnimationFrame(() => {
+      this.evictionScheduled = false;
+      // removeToast() removal is delayed (fade-out), so take a static
+      // snapshot rather than looping on the live (not-yet-shrunk) collection.
+      const toasts = [...this.container.children];
+      for (let i = MAX_VISIBLE_TOASTS; i < toasts.length; i++) {
+        this.removeToast(toasts[i]);
+      }
+    });
   }
 
   removeToast(toastEl) {
