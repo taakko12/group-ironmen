@@ -4,7 +4,7 @@
 
 const { getItemName } = require('./itemData');
 
-const POLL_INTERVAL_MS = 60 * 1000;
+const POLL_INTERVAL_MS = 10 * 1000;
 
 async function pollOnce(client) {
   const channelId = process.env.BANK_ALERT_CHANNEL_ID;
@@ -46,9 +46,9 @@ async function pollOnce(client) {
 }
 
 function start(client) {
-  setInterval(() => {
-    pollOnce(client).catch((err) => console.error(`[bankPings] poll failed: ${err.message}`));
-  }, POLL_INTERVAL_MS);
+  const run = () => pollOnce(client).catch((err) => console.error(`[bankPings] poll failed: ${err.message}`));
+  run();
+  setInterval(run, POLL_INTERVAL_MS);
 }
 
 module.exports = { start };
