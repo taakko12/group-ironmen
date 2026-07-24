@@ -743,7 +743,7 @@ pub async fn get_bank_ping_data(client: &Client, group_id: i64) -> Result<GroupB
     let stmt = client
         .prepare_cached(
             r#"
-SELECT member_name, reason, created_at
+SELECT member_name, reason, created_at, delivered_at
 FROM groupironman.bank_pings p
 INNER JOIN groupironman.members m ON m.member_id=p.member_id
 WHERE m.group_id=$1 AND m.member_name != $2
@@ -762,6 +762,7 @@ ORDER BY p.created_at ASC
         let entry = BankPingEntry {
             reason: row.try_get("reason")?,
             time: row.try_get("created_at")?,
+            delivered_at: row.try_get("delivered_at").ok(),
         };
 
         if !member_data.contains_key(&member_name) {

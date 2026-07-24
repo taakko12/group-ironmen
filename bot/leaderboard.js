@@ -58,7 +58,13 @@ function buildBankPingLeaderboard(bankPingData, period) {
     .map((member) => {
       const pings = member.pings.filter((ping) => ping.reason === 'offline' && new Date(ping.time) >= cutoff);
       const sorted = [...pings].sort((a, b) => new Date(b.time) - new Date(a.time));
-      return { name: member.name, count: pings.length, mostRecent: sorted[0] };
+      // Several items can be queued and delivered in the same batched Discord
+      // alert (one bot ping covering N unbanked items) -- delivered_at is set
+      // identically for everything drained together in that batch, so
+      // grouping on it counts distinct alerts sent rather than distinct items
+      // pinged. Undelivered pings (no delivered_at yet) each count on their own.
+      const alertKeys = new Set(pings.map((ping) => ping.delivered_at ?? `pending:${ping.time}`));
+      return { name: member.name, count: alertKeys.size, mostRecent: sorted[0] };
     })
     .filter((row) => row.count > 0)
     .sort((a, b) => b.count - a.count);

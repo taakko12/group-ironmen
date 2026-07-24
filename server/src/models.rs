@@ -146,6 +146,12 @@ pub type GroupDeathData = Vec<MemberDeathData>;
 pub struct BankPingEntry {
     pub reason: String,
     pub time: DateTime<Utc>,
+    // Set identically for every item drained together in one poll_bank_pings
+    // call, i.e. everything that ended up in the same batched Discord alert
+    // (see bot/bankPings.js's discord_id:reason grouping) -- used to count
+    // "how many times we actually pinged this person" instead of "how many
+    // items they got pinged for".
+    pub delivered_at: Option<DateTime<Utc>>,
 }
 #[derive(Serialize)]
 pub struct MemberBankPingData {
