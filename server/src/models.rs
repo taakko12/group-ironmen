@@ -140,6 +140,18 @@ pub struct MemberDeathData {
 }
 pub type GroupDeathData = Vec<MemberDeathData>;
 
+#[derive(Serialize)]
+pub struct BankPingEntry {
+    pub reason: String,
+    pub time: DateTime<Utc>,
+}
+#[derive(Serialize)]
+pub struct MemberBankPingData {
+    pub name: String,
+    pub pings: Vec<BankPingEntry>,
+}
+pub type GroupBankPingData = Vec<MemberBankPingData>;
+
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum StorageLogAction {

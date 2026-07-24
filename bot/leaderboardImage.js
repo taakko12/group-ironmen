@@ -195,4 +195,26 @@ async function renderDeathLeaderboard(rows, periodLabel) {
   return canvas.toBuffer('image/png');
 }
 
-module.exports = { renderLootLeaderboard, renderDeathLeaderboard };
+async function renderBankPingLeaderboard(rows, periodLabel) {
+  const top = rows.slice(0, MAX_ROWS);
+
+  const height = HEADER_HEIGHT + top.length * ROW_HEIGHT + PADDING;
+  const { canvas, ctx } = createScaledCanvas(WIDTH, height);
+  drawFrame(ctx, WIDTH, height, 'BANK PING LEADERBOARD', periodLabel);
+
+  top.forEach((row, i) => {
+    const y = HEADER_HEIGHT + i * ROW_HEIGHT;
+    if (i > 0) drawRowDivider(ctx, y, WIDTH);
+    const mainY = y + 26;
+    const subY = y + 50;
+    drawRank(ctx, i + 1, mainY);
+    drawName(ctx, row.name, mainY);
+    drawValue(ctx, `${row.count} ${row.count === 1 ? 'ping' : 'pings'}`, mainY, WIDTH);
+    const subtext = row.mostRecent ? `Most recent: ${new Date(row.mostRecent.time).toLocaleString()}` : '';
+    drawSubtext(ctx, null, subtext, subY);
+  });
+
+  return canvas.toBuffer('image/png');
+}
+
+module.exports = { renderLootLeaderboard, renderDeathLeaderboard, renderBankPingLeaderboard };

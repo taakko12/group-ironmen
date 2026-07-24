@@ -2,10 +2,10 @@ use crate::auth_middleware::Authenticated;
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{
-    AmIInGroupRequest, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
-    GroupStorageLog, MustBankItem, NameChange, NewDeath, NewLootDrop, NewStorageLogEntry,
-    PendingBankPing, RecentBankPings, RenameGroupMember, RequestBank, RequestBankBatch,
-    SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
+    AmIInGroupRequest, GroupBankPingData, GroupDeathData, GroupLootData, GroupMember,
+    GroupSkillData, GroupStorageLog, MustBankItem, NameChange, NewDeath, NewLootDrop,
+    NewStorageLogEntry, PendingBankPing, RecentBankPings, RenameGroupMember, RequestBank,
+    RequestBankBatch, SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
 };
 use crate::validators::{valid_name, validate_member_prop_length};
 use crate::wom;
@@ -385,6 +385,16 @@ pub async fn get_recent_bank_pings(
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let pings = db::get_recent_bank_pings(&client, auth.group_id).await?;
     Ok(web::Json(pings))
+}
+
+#[get("/get-bank-ping-data")]
+pub async fn get_bank_ping_data(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<GroupBankPingData>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let bank_ping_data = db::get_bank_ping_data(&client, auth.group_id).await?;
+    Ok(web::Json(bank_ping_data))
 }
 
 #[get("/am-i-logged-in")]

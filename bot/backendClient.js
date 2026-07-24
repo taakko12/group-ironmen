@@ -50,6 +50,10 @@ function getDeathData() {
   return get('/get-death-data');
 }
 
+function getBankPingData() {
+  return get('/get-bank-ping-data');
+}
+
 // discord_id is returned unconditionally regardless of from_time (only the
 // stat/inventory/etc columns are gated by it), so the epoch is just "give me
 // every member".
@@ -77,6 +81,7 @@ module.exports = {
   postStorageLog,
   getLootData,
   getDeathData,
+  getBankPingData,
   getGroupMembers,
   getBossKc,
   getWomGains,

@@ -1,10 +1,11 @@
 use crate::crypto::token_hash;
 use crate::error::ApiError;
 use crate::models::{
-    AggregateSkillData, CreateGroup, DeathEntry, GroupDeathData, GroupLootData, GroupMember,
-    GroupSkillData, GroupStorageLog, LootDropEntry, MemberDeathData, MemberLootData,
-    MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPing,
-    RecentBankPings, StorageLogAction, StorageLogEntry, SHARED_MEMBER,
+    AggregateSkillData, BankPingEntry, CreateGroup, DeathEntry, GroupBankPingData, GroupDeathData,
+    GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, LootDropEntry,
+    MemberBankPingData, MemberDeathData, MemberLootData, MemberSkillData, NewDeath, NewLootDrop,
+    NewStorageLogEntry, PendingBankPing, RecentBankPing, RecentBankPings, StorageLogAction,
+    StorageLogEntry, SHARED_MEMBER,
 };
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Transaction};
@@ -726,6 +727,52 @@ ORDER BY d.recorded_at ASC
             );
         } else if let Some(member_death_data) = member_data.get_mut(&member_name) {
             member_death_data.deaths.push(entry);
+        }
+    }
+
+    Ok(member_data.into_values().collect())
+}
+
+/// Full bank-ping history (both 'offline' and 'manual' reasons) per member,
+/// for the /bank-ping-leaderboard command -- mirrors get_death_data's shape
+/// so the bot can filter by period/reason and rank the same way it already
+/// does for loot/deaths (see bot/leaderboard.js), rather than aggregating
+/// here.
+pub async fn get_bank_ping_data(client: &Client, group_id: i64) -> Result<GroupBankPingData, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+SELECT member_name, reason, created_at
+FROM groupironman.bank_pings p
+INNER JOIN groupironman.members m ON m.member_id=p.member_id
+WHERE m.group_id=$1
+ORDER BY p.created_at ASC
+"#,
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetBankPingDataError)?;
+
+    let mut member_data = HashMap::new();
+    for row in rows {
+        let member_name: String = row.try_get("member_name")?;
+        let entry = BankPingEntry {
+            reason: row.try_get("reason")?,
+            time: row.try_get("created_at")?,
+        };
+
+        if !member_data.contains_key(&member_name) {
+            member_data.insert(
+                member_name.clone(),
+                MemberBankPingData {
+                    name: member_name,
+                    pings: vec![entry],
+                },
+            );
+        } else if let Some(member_bank_ping_data) = member_data.get_mut(&member_name) {
+            member_bank_ping_data.pings.push(entry);
         }
     }
 
