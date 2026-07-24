@@ -96,13 +96,14 @@ export class SkillGraph extends BaseElement {
 `;
     };
 
-    let tableRows = [];
+    let memberSections = [];
     const memberEntriesSortedByXpGain = Object.entries(tableData).sort(
       (a, b) => b[1][this.skillName].xpGain - a[1][this.skillName].xpGain
     );
     for (const [name, x] of memberEntriesSortedByXpGain) {
       const totalXpGain = x[this.skillName].totalXpGain;
-      tableRows.push(row("", name, x[this.skillName], totalXpGain));
+      let sectionRows = row("skill-graph__member-row", name, x[this.skillName], totalXpGain);
+      let hasSubRows = false;
 
       if (this.skillName === SkillName.Overall) {
         const skillNamesSortedByXpGain = [...skillNames].sort((a, b) => x[b].xpGain - x[a].xpGain);
@@ -110,16 +111,31 @@ export class SkillGraph extends BaseElement {
           const s = x[skillName];
 
           if (s.xpGain > 0) {
-            tableRows.push(row("skill-graph__overall-skill-change", skillName, s, x[this.skillName].xpGain));
+            sectionRows += row("skill-graph__overall-skill-change", skillName, s, x[this.skillName].xpGain);
+            hasSubRows = true;
           }
         }
       }
+
+      // Only members with sub-skill rows to hide get the collapse
+      // affordance -- collapsing a single-skill view (no sub-rows at all)
+      // wouldn't do anything.
+      const collapsibleClass = hasSubRows ? " skill-graph__member-section--collapsible" : "";
+      memberSections.push(`<tbody class="skill-graph__member-section${collapsibleClass}">${sectionRows}</tbody>`);
     }
     this.tableContainer.innerHTML = `
 <table>
-  ${tableRows.join("")}
+  ${memberSections.join("")}
 </table>
 `;
+
+    for (const memberRow of this.tableContainer.querySelectorAll(
+      ".skill-graph__member-section--collapsible .skill-graph__member-row"
+    )) {
+      this.eventListener(memberRow, "click", () => {
+        memberRow.closest("tbody").classList.toggle("skill-graph__member-section--collapsed");
+      });
+    }
   }
 
   // A per-member checkbox to show/hide that member's line on the chart,

@@ -103,3 +103,21 @@ skill-graph {
   margin-right: 0.5em;
   width: 1.25em;
 }
+
+.skill-graph__member-section--collapsible .skill-graph__member-row {
+  cursor: pointer;
+}
+
+.skill-graph__member-section--collapsible .skill-graph__member-row td:first-child::before {
+  content: "\25be"; /* ▾ */
+  display: inline-block;
+  width: 1em;
+}
+
+.skill-graph__member-section--collapsed .skill-graph__member-row td:first-child::before {
+  content: "\25b8"; /* ▸ */
+}
+
+.skill-graph__member-section--collapsed tr:not(.skill-graph__member-row) {
+  display: none;
+}
