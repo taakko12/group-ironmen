@@ -12,14 +12,23 @@ export class PlayerIcon extends BaseElement {
 
   connectedCallback() {
     super.connectedCallback();
-    const playerName = this.getAttribute("player-name");
-    const hue = groupData.members.get(playerName).hue || 0;
-    this.style.setProperty("--player-icon-color", `${hue}deg`);
+    this.playerName = this.getAttribute("player-name");
+    this.updateHue();
     this.render();
+
+    // The color, once set at connect time, otherwise never changed again --
+    // re-picking a color in settings wouldn't show up on an already-mounted
+    // icon until a full page reload. Subscribing picks up live updates too.
+    this.subscribe(`color:${this.playerName}`, this.updateHue.bind(this));
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
+  }
+
+  updateHue() {
+    const hue = groupData.members.get(this.playerName).hue || 0;
+    this.style.setProperty("--player-icon-color", `${hue}deg`);
   }
 }
 

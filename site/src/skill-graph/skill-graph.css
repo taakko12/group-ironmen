@@ -50,6 +50,15 @@ skill-graph {
 
 .skill-graph__table-container td {
   padding: 4px;
+  /* Each row's background is a hard-edged gradient of the member's chosen
+     color fading to fully transparent partway across the row (see
+     skill-graph.js's row()), so a single fixed text color can't stay
+     readable across both the colored and transparent portions of the same
+     row -- a dark halo keeps the light text legible over bright/light
+     custom colors without needing to know which part of the row it's over,
+     and is invisible enough over the default dark background to not matter
+     there. */
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.85), 0 0 6px rgba(0, 0, 0, 0.6);
 }
 
 .skill-graph__overall-skill-change {

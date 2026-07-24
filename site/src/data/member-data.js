@@ -167,6 +167,12 @@ export class MemberData {
     if (memberData.color) {
       this.color = memberData.color;
       this.hue = hueFromColor(this.color);
+      // player-icon reads this once at connect time and otherwise has no
+      // way to know the color changed later (its host element isn't
+      // recreated on every data poll, only when the member roster itself
+      // changes) -- publish so it can react live instead of only ever
+      // showing whatever hue was in effect when it first mounted.
+      this.publishUpdate("color");
     }
 
     if (memberData.skills) {
