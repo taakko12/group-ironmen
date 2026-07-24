@@ -64,11 +64,15 @@ inventory-item.rendered {
   filter: none;
 }
 
-.inventory-item__request-checkbox {
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
+/* The input itself is display:none site-wide (main.css); its adjacent
+   label is what actually renders (::before checkbox graphic) and is the
+   real grid item here, so it's the one that needs positioning. */
+.inventory-item__request-label {
   justify-self: end;
+}
+
+input[type="checkbox"] + .inventory-item__request-label::before {
+  padding-right: 0;
 }
 
 .inventory-item__quantity-bar {

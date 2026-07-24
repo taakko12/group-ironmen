@@ -73,12 +73,24 @@ export class InventoryItem extends BaseElement {
 </div>
 ${
   quantity > 0
-    ? `<input type="checkbox" class="inventory-item__request-checkbox" data-player-name="${playerName}"
-        title="Select to request ${playerName} bank this"
-        ${bankRequestSelection.has(playerName, this.itemId) ? "checked" : ""} />`
+    ? `<input type="checkbox" id="${this.checkboxId(playerName)}" class="inventory-item__request-checkbox" data-player-name="${playerName}"
+        ${bankRequestSelection.has(playerName, this.itemId) ? "checked" : ""} /><label for="${this.checkboxId(
+        playerName
+      )}" class="inventory-item__request-label" title="Select to request ${playerName} bank this"></label>`
     : "<span></span>"
 }
 `;
+  }
+
+  // input[type="checkbox"] is display:none site-wide (see main.css) -- the
+  // visible box comes from an adjacent <label>'s ::before via a for/id pair
+  // (same pattern as the "Individual item price" toggle), not the input
+  // itself. That also means the input doesn't generate a grid item (a
+  // display:none element is excluded from grid placement entirely), so this
+  // pair still counts as exactly one cell in .inventory-item__bottom's
+  // 4-column layout, same as the single element it replaced.
+  checkboxId(playerName) {
+    return `bank-request-${this.itemId}-${playerName.replace(/[^a-zA-Z0-9]/g, "-")}`;
   }
 
   handleUpdatedItem(item) {
