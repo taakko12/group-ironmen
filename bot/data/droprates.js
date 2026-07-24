@@ -724,54 +724,100 @@ module.exports = {
   chambers_of_xeric: {
     displayName: 'Chambers of Xeric',
     uniques: [
-      // CoX uniques come from the Ancient Chest via a points-based unique
-      // table (more points = better odds), not a flat per-raid rate -- the
-      // wiki doesn't publish simple 1/N numbers for individual items
-      // (twisted bow, elder maul, etc.), so this needs dedicated follow-up
-      // research against the Chest (Chambers of Xeric) reward mechanics
-      // rather than guessed-at numbers.
+      // Deliberately left empty: CoX uniques come from the Ancient Chest via
+      // a points-based table (1% chance per 8,675 total points, capped at
+      // 65.7% / 570,000 points -- extra points roll a 2nd unique), not a
+      // flat per-KC rate, so the (1 - 1/rate)^kc dry-streak formula doesn't
+      // apply without a personal-points history we don't have.
+      //
+      // Once a unique IS rolled, the item is picked from a 69-weight table
+      // (confirmed via the Ancient chest wiki page): Dexterous prayer scroll
+      // 20, Arcane prayer scroll 20, Twisted buckler 4, Dragon hunter
+      // crossbow 4, Dinh's bulwark 3, Ancestral hat 3, Ancestral robe top 3,
+      // Ancestral robe bottom 3, Dragon claws 3, Elder maul 2, Kodai
+      // insignia 2, Twisted bow 2. Olmlet pet is a flat 1/53 whenever a
+      // unique rolls (not points-scaled). Torn prayer scroll and Dark relic
+      // exist outside this 69-weight table on a secondary roll the wiki
+      // didn't give a trustworthy number for (got a "2 x 1/33" that doesn't
+      // reconcile with anything else) -- don't trust that figure.
     ],
   },
   chambers_of_xeric_challenge_mode: {
     displayName: 'Chambers of Xeric: Challenge Mode',
     uniques: [
-      // Same points-based mechanic as normal CoX, plus its own Metamorphic
-      // dust -- needs the same follow-up research as chambers_of_xeric.
+      // Same points-based mechanic and 69-weight item table as normal CoX.
+      // Its one CM-exclusive addition, Metamorphic dust, IS a clean flat
+      // rate: 1/400 per player per completion under the time limit, rolled
+      // independently of (i.e. in addition to) the regular unique roll --
+      // that one could be added as its own dry-streak entry if wanted, but
+      // wasn't since the rest of this boss's uniques still can't be.
     ],
   },
   theatre_of_blood: {
     displayName: 'Theatre of Blood',
     uniques: [
-      {
-        name: 'Any unique (combined)',
-        rate: 9.1,
-        note: "the wiki gives an overall ~11% chance of any unique per completion, not a per-item split -- individual item odds (scythe, rapier, sang staff, justiciar, avernic hilt) need dedicated follow-up research",
-      },
+      // Deliberately left empty (previously had a combined "any unique"
+      // ~11% approximation here -- removed since it would answer "am I dry
+      // on the scythe" using the same odds as "am I dry on the hilt", which
+      // is actively misleading, not just imprecise).
+      //
+      // The real per-item weights ARE known and confirmed item-by-item
+      // against each item's own wiki page (all sum to the stated totals):
+      // normal mode, out of 19: Avernic defender hilt 8, Ghrazi rapier 2,
+      // Sanguinesti staff 2, Justiciar faceguard 2, Justiciar chestguard 2,
+      // Justiciar legguards 2, Scythe of vitur 1. Unlike CoX/ToA this ISN'T
+      // points-scaled -- it's a flat 11% chance of some unique per
+      // completion (13% hard mode), so a real per-item rate here would
+      // actually be rate = 1 / (0.11 * weight/19) per completion, e.g.
+      // Scythe = 1 / (0.11 * 1/19) ~= 1/173. Left unwired pending a decision
+      // on whether "completions" tracked by WOM's boss KC for this raid is
+      // an accurate stand-in for "raids where a unique could roll" (entry
+      // mode completions get 0% unique chance and would need excluding).
+      // Lil' Zik pet is personal-performance-scaled (1/650-1/6,500 normal,
+      // 1/500-1/5,000 hard mode based on an invisible points score), not a
+      // single flat number.
     ],
   },
   theatre_of_blood_hard_mode: {
     displayName: 'Theatre of Blood: Hard Mode',
     uniques: [
-      {
-        name: 'Any unique (combined)',
-        rate: 7.7,
-        note: "the wiki gives an overall ~13% chance of any unique per completion in Hard Mode, not a per-item split -- individual item odds need dedicated follow-up research",
-      },
+      // Same mechanic as normal ToB. Hard mode weights, out of 18: Avernic
+      // defender hilt 7, Ghrazi rapier 2, Sanguinesti staff 2, Justiciar
+      // faceguard 2, Justiciar chestguard 2, Justiciar legguards 2, Scythe
+      // of vitur 1, against a flat 13% any-unique chance per completion.
+      // Left unwired for the same reason as theatre_of_blood.
     ],
   },
   tombs_of_amascut: {
     displayName: 'Tombs of Amascut',
     uniques: [
-      // ToA uniques scale with raid level/invocations, and the wiki doesn't
-      // publish simple flat per-item rates -- needs dedicated follow-up
-      // research rather than guessed-at numbers.
+      // Deliberately left empty: ToA uniques are 1% chance per
+      // (10,500 - 20*RL) total points, where RL is the invoked raid level --
+      // both the unique chance AND the per-item weights shift with raid
+      // level (rebalanced at RL 350/400/450/500 breakpoints in a June 2025
+      // update), so there's no single flat rate to put here without
+      // tracking what raid level someone actually plays at.
+      //
+      // At RL 400 specifically (confirmed via the Chest (Tombs of Amascut)
+      // wiki page, weights sum to ~100%): Osmumten's fang 21.1%, Lightbearer
+      // 26.3%, Elidinis' ward 15.8%, Masori mask/body/chaps 10.5% each,
+      // Tumeken's shadow 5.3%. Higher raid levels shift share away from
+      // fang/lightbearer toward the others. Thread of Elidinis and the 4
+      // Keris partisan jewels are separate pity-timer tracks outside this
+      // chest table (Thread: 1/10 base rising to 3/10 by 15 raids without
+      // it, resets to 1/50 after first obtained; jewels: 1/50 base rising
+      // to 3/50 by 75 raids, pity-guaranteed rotation until all 4 owned).
     ],
   },
   tombs_of_amascut_expert: {
     displayName: 'Tombs of Amascut: Expert Mode',
     uniques: [
-      // Same raid-level-scaled mechanic as normal ToA -- needs the same
-      // follow-up research as tombs_of_amascut.
+      // Same raid-level-scaled mechanic and item table as normal ToA.
+      // Expert-exclusive additions: Tumeken's guardian pet is 1% chance per
+      // (350,000 - 700*RL) points (same style formula, separate track from
+      // the item chest); Remnants (Akkha/Ba-Ba/Kephri/Zebak/Ancient) are
+      // guaranteed drops for specific challenge completions at RL 450+, not
+      // RNG at all, so they don't belong in a dry-streak table regardless.
     ],
   },
   yama: {
