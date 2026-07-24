@@ -5,14 +5,20 @@ import { Item } from "../data/item";
 const POLL_INTERVAL_MS = 20000;
 const AUTO_DISMISS_MS = 9000;
 const MAX_VISIBLE_TOASTS = 6;
+const CURSOR_STORAGE_KEY = "toast-notifications:cursor";
+// If someone hasn't had the site open in this browser for longer than this,
+// don't try to replay the full backlog since then -- just fast-forward to
+// now so re-opening a long-stale tab doesn't burst-fire a huge pile of
+// months-old toasts.
+const MAX_CATCHUP_MS = 24 * 60 * 60 * 1000;
 
 // Site-wide (mounted once, outside routing, alongside rs-tooltip/confirm-dialog)
 // so a toast fires no matter which page is open. Since data only ever comes
 // from polling REST endpoints (no push/websocket), "new" is detected by
-// diffing each poll against a set of synthetic keys seen so far. The very
-// first poll after connecting only builds that baseline silently -- without
-// it, every pre-existing drop/death/ping/storage-transaction in history
-// would toast at once on every page load.
+// comparing each entry's timestamp against a cursor persisted in
+// localStorage (not just in-memory) -- so if someone does something in-game
+// and *then* loads/refreshes the site to check, it still toasts, instead of
+// looking like pre-existing history to a freshly-reset in-memory baseline.
 export class ToastNotifications extends BaseElement {
   constructor() {
     super();
@@ -31,9 +37,21 @@ export class ToastNotifications extends BaseElement {
     this.seenDeaths = new Set();
     this.seenBankPings = new Set();
     this.seenStorageLog = new Set();
-    this.baselineEstablished = false;
+    this.cursor = this.loadCursor();
 
     this.subscribeOnce("get-group-data", this.start.bind(this));
+  }
+
+  loadCursor() {
+    const stored = window.localStorage.getItem(CURSOR_STORAGE_KEY);
+    const now = Date.now();
+    if (stored) {
+      const storedTime = new Date(stored).getTime();
+      if (!isNaN(storedTime) && now - storedTime < MAX_CATCHUP_MS) {
+        return storedTime;
+      }
+    }
+    return now;
   }
 
   disconnectedCallback() {
@@ -57,14 +75,27 @@ export class ToastNotifications extends BaseElement {
         api.getRecentBankPings(),
         api.getStorageLog(),
       ]);
+      // Held fixed for this whole poll so every entry is compared against
+      // the same starting point, then becomes the new cursor once done.
+      this.pendingCursor = this.cursor;
       this.processLoot(lootData);
       this.processDeaths(deathData);
       this.processBankPings(bankPings);
       this.processStorageLog(storageLog);
-      this.baselineEstablished = true;
+      this.cursor = this.pendingCursor;
+      window.localStorage.setItem(CURSOR_STORAGE_KEY, new Date(this.cursor).toISOString());
     } catch (err) {
       console.error("[toast-notifications] poll failed", err);
     }
+  }
+
+  // True if `timeStr` is newer than the cursor as of the start of this poll
+  // (so it should toast); always advances pendingCursor so the next poll's
+  // cursor covers everything seen in this one, toasted or not.
+  isNewSinceCursor(timeStr) {
+    const t = new Date(timeStr).getTime();
+    if (t > this.pendingCursor) this.pendingCursor = t;
+    return t > this.cursor;
   }
 
   processLoot(lootData) {
@@ -73,7 +104,7 @@ export class ToastNotifications extends BaseElement {
         const key = `${member.name}|${drop.item_name}|${drop.gp_value}|${drop.time}`;
         if (this.seenLoot.has(key)) continue;
         this.seenLoot.add(key);
-        if (this.baselineEstablished) this.showLootToast(member.name, drop);
+        if (this.isNewSinceCursor(drop.time)) this.showLootToast(member.name, drop);
       }
     }
   }
@@ -84,7 +115,7 @@ export class ToastNotifications extends BaseElement {
         const key = `${member.name}|${death.time}`;
         if (this.seenDeaths.has(key)) continue;
         this.seenDeaths.add(key);
-        if (this.baselineEstablished) this.showDeathToast(member.name, death);
+        if (this.isNewSinceCursor(death.time)) this.showDeathToast(member.name, death);
       }
     }
   }
@@ -94,7 +125,7 @@ export class ToastNotifications extends BaseElement {
       const key = `${ping.member_name}|${ping.item_id}|${ping.reason}|${ping.created_at}`;
       if (this.seenBankPings.has(key)) continue;
       this.seenBankPings.add(key);
-      if (this.baselineEstablished) this.showBankPingToast(ping);
+      if (this.isNewSinceCursor(ping.created_at)) this.showBankPingToast(ping);
     }
   }
 
@@ -103,7 +134,7 @@ export class ToastNotifications extends BaseElement {
       const key = `${entry.member_name}|${entry.item_name}|${entry.quantity}|${entry.action}|${entry.time}`;
       if (this.seenStorageLog.has(key)) continue;
       this.seenStorageLog.add(key);
-      if (this.baselineEstablished) this.showStorageLogToast(entry);
+      if (this.isNewSinceCursor(entry.time)) this.showStorageLogToast(entry);
     }
   }
 
