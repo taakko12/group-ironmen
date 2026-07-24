@@ -47,6 +47,14 @@ toast-notifications {
   opacity: 0.9;
 }
 
+.toast-notifications__toast--storage-deposit {
+  border-left-color: #3cb35a;
+}
+
+.toast-notifications__toast--storage-withdraw {
+  border-left-color: #d9533f;
+}
+
 .toast-notifications__link {
   display: flex;
   align-items: center;
@@ -86,6 +94,14 @@ toast-notifications {
 .toast-notifications__toast--bank .toast-notifications__title {
   color: #8fb3d9;
   font-size: 0.88em;
+}
+
+.toast-notifications__toast--storage-deposit .toast-notifications__title {
+  color: #7bd68a;
+}
+
+.toast-notifications__toast--storage-withdraw .toast-notifications__title {
+  color: #e08b7c;
 }
 
 .toast-notifications__body {

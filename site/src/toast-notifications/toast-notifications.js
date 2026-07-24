@@ -11,8 +11,8 @@ const MAX_VISIBLE_TOASTS = 6;
 // from polling REST endpoints (no push/websocket), "new" is detected by
 // diffing each poll against a set of synthetic keys seen so far. The very
 // first poll after connecting only builds that baseline silently -- without
-// it, every pre-existing drop/death/ping in history would toast at once on
-// every page load.
+// it, every pre-existing drop/death/ping/storage-transaction in history
+// would toast at once on every page load.
 export class ToastNotifications extends BaseElement {
   constructor() {
     super();
@@ -30,6 +30,7 @@ export class ToastNotifications extends BaseElement {
     this.seenLoot = new Set();
     this.seenDeaths = new Set();
     this.seenBankPings = new Set();
+    this.seenStorageLog = new Set();
     this.baselineEstablished = false;
 
     this.subscribeOnce("get-group-data", this.start.bind(this));
@@ -50,14 +51,16 @@ export class ToastNotifications extends BaseElement {
 
   async poll() {
     try {
-      const [lootData, deathData, bankPings] = await Promise.all([
+      const [lootData, deathData, bankPings, storageLog] = await Promise.all([
         api.getLootData(),
         api.getDeathData(),
         api.getRecentBankPings(),
+        api.getStorageLog(),
       ]);
       this.processLoot(lootData);
       this.processDeaths(deathData);
       this.processBankPings(bankPings);
+      this.processStorageLog(storageLog);
       this.baselineEstablished = true;
     } catch (err) {
       console.error("[toast-notifications] poll failed", err);
@@ -95,6 +98,15 @@ export class ToastNotifications extends BaseElement {
     }
   }
 
+  processStorageLog(storageLog) {
+    for (const entry of storageLog) {
+      const key = `${entry.member_name}|${entry.item_name}|${entry.quantity}|${entry.action}|${entry.time}`;
+      if (this.seenStorageLog.has(key)) continue;
+      this.seenStorageLog.add(key);
+      if (this.baselineEstablished) this.showStorageLogToast(entry);
+    }
+  }
+
   showLootToast(memberName, drop) {
     const imageUrl = drop.image_url || drop.screenshot_url;
     this.addToast({
@@ -125,6 +137,20 @@ export class ToastNotifications extends BaseElement {
       title: `${ping.member_name} ${reasonLabel}`,
       body: itemName,
       link: null,
+    });
+  }
+
+  showStorageLogToast(entry) {
+    const isDeposit = entry.action === "deposit";
+    const verb = isDeposit ? "deposited" : "withdrew";
+    const preposition = isDeposit ? "into" : "from";
+    const value = entry.gp_value ? ` (${entry.gp_value.toLocaleString()} gp)` : "";
+    this.addToast({
+      type: isDeposit ? "storage-deposit" : "storage-withdraw",
+      icon: null,
+      title: `${entry.member_name} ${verb} ${preposition} shared storage`,
+      body: `${entry.quantity} x ${entry.item_name}${value}`,
+      link: entry.message_link,
     });
   }
 
