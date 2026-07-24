@@ -51,6 +51,12 @@ async function generateRoast(imageUrl) {
       ],
       max_tokens: 120,
       temperature: 1.0,
+      // qwen3.6 is a reasoning model and defaults to spending its output
+      // budget on a <think> block instead of the actual line -- turn
+      // thinking off entirely, and hide/strip any reasoning that slips
+      // through anyway so message.content is just the roast.
+      reasoning_effort: 'none',
+      reasoning_format: 'hidden',
     }),
   });
   if (!response.ok) {
