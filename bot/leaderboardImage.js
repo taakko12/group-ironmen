@@ -14,15 +14,30 @@ GlobalFonts.registerFromPath(path.join(__dirname, 'assets/fonts/RuneScape-Chat-B
 const WIDTH = 720;
 const PADDING = 24;
 const HEADER_HEIGHT = 84;
-const ROW_HEIGHT = 72;
+const ROW_HEIGHT = 78;
 const MAX_ROWS = 10;
+
+// Discord generates a downscaled thumbnail for the inline chat preview
+// (the full-res image only shows once you click to expand it), and that
+// downscale softens small text badly. Rendering at 2x and letting Discord's
+// resizer downsample from a sharper source fixes the blurry-preview look
+// without changing any of the draw calls below, which stay in 720-wide
+// logical coordinates.
+const SCALE = 2;
+
+function createScaledCanvas(width, height) {
+  const canvas = createCanvas(width * SCALE, height * SCALE);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(SCALE, SCALE);
+  return { canvas, ctx };
+}
 
 const COLOR_BACKGROUND = '#000000';
 const COLOR_BORDER = '#ff981f';
 const COLOR_HEADER = '#ff981f';
 const COLOR_NAME = '#ffffff';
 const COLOR_VALUE = '#ffff00';
-const COLOR_SUBTEXT = '#9a9a9a';
+const COLOR_SUBTEXT = '#d8d8d8';
 const COLOR_DIVIDER = 'rgba(255, 255, 255, 0.08)';
 const RANK_COLORS = ['#ffd700', '#c0c0c0', '#e0954f'];
 
@@ -114,13 +129,13 @@ function drawValue(ctx, text, centerY, width) {
 function drawSubtext(ctx, icon, text, centerY) {
   let x = 78;
   if (icon) {
-    ctx.drawImage(icon, x, centerY - 12, 24, 24);
-    x += 32;
+    ctx.drawImage(icon, x, centerY - 14, 28, 28);
+    x += 36;
   }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = COLOR_SUBTEXT;
-  ctx.font = '16px rssmall';
+  ctx.font = '19px rssmall';
   ctx.fillText(text, x, centerY);
 }
 
@@ -129,8 +144,7 @@ async function renderLootLeaderboard(rows, periodLabel) {
   const icons = await Promise.all(top.map((row) => getItemIcon(row.mostRecent?.item_name)));
 
   const height = HEADER_HEIGHT + top.length * ROW_HEIGHT + PADDING;
-  const canvas = createCanvas(WIDTH, height);
-  const ctx = canvas.getContext('2d');
+  const { canvas, ctx } = createScaledCanvas(WIDTH, height);
   drawFrame(ctx, WIDTH, height, 'LOOT LEADERBOARD', periodLabel);
 
   top.forEach((row, i) => {
@@ -152,8 +166,7 @@ async function renderDeathLeaderboard(rows, periodLabel) {
   const top = rows.slice(0, MAX_ROWS);
 
   const height = HEADER_HEIGHT + top.length * ROW_HEIGHT + PADDING;
-  const canvas = createCanvas(WIDTH, height);
-  const ctx = canvas.getContext('2d');
+  const { canvas, ctx } = createScaledCanvas(WIDTH, height);
   drawFrame(ctx, WIDTH, height, 'DEATH LEADERBOARD', periodLabel);
 
   top.forEach((row, i) => {
