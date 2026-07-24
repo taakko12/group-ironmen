@@ -745,13 +745,13 @@ pub async fn get_bank_ping_data(client: &Client, group_id: i64) -> Result<GroupB
 SELECT member_name, reason, created_at
 FROM groupironman.bank_pings p
 INNER JOIN groupironman.members m ON m.member_id=p.member_id
-WHERE m.group_id=$1
+WHERE m.group_id=$1 AND m.member_name != $2
 ORDER BY p.created_at ASC
 "#,
         )
         .await?;
     let rows = client
-        .query(&stmt, &[&group_id])
+        .query(&stmt, &[&group_id, &SHARED_MEMBER])
         .await
         .map_err(ApiError::GetBankPingDataError)?;
 
