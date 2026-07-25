@@ -1380,6 +1380,16 @@ RETURNING m.member_id, m.member_name, m.discord_id, p.item_id, p.reason
             })
             .unwrap_or(0);
 
+        // The member may have banked/dropped/lost the item between when this
+        // ping was queued and now (e.g. a storage-log deposit that zeroed
+        // their cached snapshot) -- a "you're holding 0 of this, go bank it"
+        // alert is never correct, so drop it instead of delivering it. The
+        // row is still marked delivered above either way, so it won't be
+        // re-checked on the next poll.
+        if quantity <= 0 {
+            continue;
+        }
+
         result.push(PendingBankPing {
             member_name: row.try_get("member_name")?,
             discord_id: row.try_get("discord_id").ok(),
