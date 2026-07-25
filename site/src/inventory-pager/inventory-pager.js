@@ -21,13 +21,16 @@ export class InventoryPager extends BaseElement {
     this.searchElement = document.querySelector(".items-page__search");
     this.showIndividualPricesInput = document.querySelector("#items-page__individual-items");
     this.showIndividualPrices = this.showIndividualPricesInput.checked;
+    this.mustBankFilterInput = document.querySelector("#items-page__must-bank-filter");
     this.playerFilter = document.querySelector(".items-page__player-filter");
     this.eventListener(this.searchElement, "input", this.handleSearch.bind(this));
     this.eventListener(this.sortTarget, "change", this.handleSortChange.bind(this));
     this.eventListener(this, "click", this.handleClick.bind(this));
     this.eventListener(this.showIndividualPricesInput, "change", this.handleIndividualPricesChange.bind(this));
+    this.eventListener(this.mustBankFilterInput, "change", this.handleMustBankFilterChange.bind(this));
     this.eventListener(this.playerFilter, "change", this.handlePlayerFilterChange.bind(this));
     this.subscribe("items-updated", this.handleUpdatedItems.bind(this));
+    this.subscribe("must-bank-items-updated", this.handleMustBankItemsUpdated.bind(this));
 
     this.searchElement.searchInput.value = groupData.textFilter;
   }
@@ -60,6 +63,21 @@ export class InventoryPager extends BaseElement {
 
   handleIndividualPricesChange() {
     this.showIndividualPrices = this.showIndividualPricesInput.checked;
+    this.maybeRenderPage(this.currentPage, true);
+    this.render();
+  }
+
+  handleMustBankFilterChange() {
+    groupData.applyMustBankFilter(this.mustBankFilterInput.checked);
+    this.maybeRenderPage(this.currentPage, true);
+    this.render();
+  }
+
+  // Tagging/untagging an item elsewhere (item-box, inventory-item) should
+  // immediately affect this page's visible list if the filter is active.
+  handleMustBankItemsUpdated() {
+    if (!this.mustBankFilterInput.checked) return;
+    groupData.applyMustBankFilter(true);
     this.maybeRenderPage(this.currentPage, true);
     this.render();
   }

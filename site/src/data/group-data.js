@@ -4,6 +4,7 @@ import { Item } from "./item";
 import { SkillName } from "./skill";
 import { QuestState, Quest } from "./quest";
 import { utility } from "../utility";
+import { mustBankItems } from "./must-bank-items";
 
 export class GroupData {
   constructor() {
@@ -12,6 +13,7 @@ export class GroupData {
     this.textFilter = "";
     this.textFilters = [""];
     this.playerFilter = "@ALL";
+    this.mustBankFilter = false;
   }
 
   update(groupData) {
@@ -83,7 +85,12 @@ export class GroupData {
           this.groupItems[item.id] = groupItem;
 
           if (applyFilter) {
-            groupItem.visible = this.shouldItemBeVisible(groupItem, this.textFilters, this.playerFilter);
+            groupItem.visible = this.shouldItemBeVisible(
+              groupItem,
+              this.textFilters,
+              this.playerFilter,
+              this.mustBankFilter
+            );
           }
 
           pubsub.publish(`item-update:${item.id}`, groupItem);
@@ -154,10 +161,18 @@ export class GroupData {
     return playerFilter === "@ALL" || item.quantities[playerFilter] === undefined || item.quantities[playerFilter] > 0;
   }
 
-  shouldItemBeVisible(item, textFilters, playerFilter) {
+  passesMustBankFilter(item, mustBankFilter) {
+    return !mustBankFilter || mustBankItems.has(item.id);
+  }
+
+  shouldItemBeVisible(item, textFilters, playerFilter, mustBankFilter) {
     if (!item || !item.quantities) return false;
 
-    return this.passesTextFilter(item, textFilters) && this.passesPlayerFilter(item, playerFilter);
+    return (
+      this.passesTextFilter(item, textFilters) &&
+      this.passesPlayerFilter(item, playerFilter) &&
+      this.passesMustBankFilter(item, mustBankFilter)
+    );
   }
 
   applyTextFilter(textFilter) {
@@ -166,7 +181,7 @@ export class GroupData {
     this.textFilters = textFilters;
     const items = Object.values(this.groupItems);
     for (const item of items) {
-      item.visible = this.shouldItemBeVisible(item, textFilters, this.playerFilter);
+      item.visible = this.shouldItemBeVisible(item, textFilters, this.playerFilter, this.mustBankFilter);
     }
   }
 
@@ -174,7 +189,18 @@ export class GroupData {
     this.playerFilter = playerFilter;
     const items = Object.values(this.groupItems);
     for (const item of items) {
-      item.visible = this.shouldItemBeVisible(item, this.textFilters, playerFilter);
+      item.visible = this.shouldItemBeVisible(item, this.textFilters, playerFilter, this.mustBankFilter);
+    }
+  }
+
+  // Re-applied whenever the tagged must-bank set changes too (see
+  // inventory-pager.js), since a tag/untag elsewhere should immediately
+  // show/hide items here if this filter is active.
+  applyMustBankFilter(mustBankFilter) {
+    this.mustBankFilter = mustBankFilter;
+    const items = Object.values(this.groupItems);
+    for (const item of items) {
+      item.visible = this.shouldItemBeVisible(item, this.textFilters, this.playerFilter, mustBankFilter);
     }
   }
 
