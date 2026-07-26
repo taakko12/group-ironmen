@@ -80,26 +80,33 @@ pub fn valid_hex_color(color: &str) -> bool {
     HEX_COLOR_RE.is_match(color)
 }
 
+pub enum ArrayFormat {
+    Flat,
+    ItemPairs,
+}
+
 pub fn validate_member_prop_length<T>(
     prop_name: &str,
     value: &Option<Vec<T>>,
     min: usize,
     max: usize,
+    format: ArrayFormat,
 ) -> Result<(), ApiError> {
-    match value {
-        None => Ok(()),
-        Some(x) => {
-            if (min..=max).contains(&x.len()) {
-                Ok(())
-            } else {
-                Err(ApiError::GroupMemberValidationError(format!(
-                    "{} length violated range constraint {}..={} actual={}",
-                    prop_name,
-                    min,
-                    max,
-                    x.len()
-                )))
-            }
-        }
+    let Some(x) = value else {
+        return Ok(());
+    };
+    let len = x.len();
+    if !(min..=max).contains(&len) {
+        return Err(ApiError::GroupMemberValidationError(format!(
+            "{} length violated range constraint {}..={} actual={}",
+            prop_name, min, max, len
+        )));
     }
+    if matches!(format, ArrayFormat::ItemPairs) && len % 2 != 0 {
+        return Err(ApiError::GroupMemberValidationError(format!(
+            "{} must have an even number of elements (item-id/quantity pairs), got {}",
+            prop_name, len
+        )));
+    }
+    Ok(())
 }
