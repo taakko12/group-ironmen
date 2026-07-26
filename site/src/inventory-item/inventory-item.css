@@ -1,14 +1,15 @@
 inventory-item {
   display: flex;
   box-sizing: border-box;
-  overflow: hidden;
   flex-direction: column;
   position: relative;
-  transform: translate3d(0, 0, 1px);
   color: var(--primary-text);
   min-height: 250px;
 
   visibility: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 250px;
+  contain: layout style paint;
 }
 
 inventory-item.rendered {
@@ -20,7 +21,6 @@ inventory-item.rendered {
   display: grid;
   grid-template-columns: 2fr 1fr;
   align-items: center;
-  transform: translateZ(1px);
   padding: 8px;
   margin: -1px 0 0 -1px;
 
@@ -40,7 +40,7 @@ inventory-item.rendered {
   min-height: 56px;
   min-width: 63px;
   border: none;
-  image-rendering: optimizequality;
+  image-rendering: auto;
 }
 
 .inventory-item__bottom {
@@ -106,4 +106,13 @@ input[type="checkbox"] + .inventory-item__request-label::before {
 .inventory-item__name > a {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.inventory-item__badge {
+  font-weight: bold;
+  color: hsl(280, 80%, 85%);
+}
+
+inventory-item[potion-storage] .inventory-item__top {
+  background: hsla(280, 40%, 20%, 0.4);
 }

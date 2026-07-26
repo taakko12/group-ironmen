@@ -4,8 +4,9 @@
       <a class="rstext" href="${item.wikiLink}" target="_blank">${item.name}</a>
       <span class="inventory-item__tag-button" title="Toggle 'must bank' tag">🔖</span>
     </div>
+    ${badge}
     <div class="inventory-item__details">
-      <span>Quantity</span>
+      <span>${quantityLabel}</span>
       <span>${this.quantity.toLocaleString()}</span>
       <span>High Alch</span>
       <span>${this.highAlch}</span>
