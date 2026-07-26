@@ -99,6 +99,23 @@ class Utility {
     return s?.replace(this.tagRegexp, "");
   }
 
+  // Member colors can be either the built-in hsl() round-robin palette or a
+  // user-picked hex color (site/src/edit-member/edit-member.js), so this
+  // needs to handle both. Used to soften a line's solid color down to a
+  // translucent fill/background shade (graphs) instead of assuming hsl().
+  colorWithAlpha(color, alpha) {
+    if (color.startsWith("hsl(")) {
+      return color.replace("hsl(", "hsla(").replace(")", `, ${alpha})`);
+    }
+    if (color.startsWith("#") && color.length === 7) {
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    return color;
+  }
+
   // Discord message links are stored/displayed as https://discord.com/... so
   // they're plain readable URLs, but clicking that in a browser just opens
   // discord.com in a new tab instead of the desktop/mobile app. Discord's

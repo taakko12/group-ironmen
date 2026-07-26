@@ -1,22 +1,7 @@
 /* global Chart */
 import { BaseElement } from "../base-element/base-element";
 import { Skill, SkillName } from "../data/skill";
-
-// Member colors can be either the built-in hsl() round-robin palette or a
-// user-picked hex color (site/src/edit-member/edit-member.js), so this needs
-// to handle both rather than assuming hsl() like upstream's version does.
-function colorWithAlpha(color, alpha) {
-  if (color.startsWith("hsl(")) {
-    return color.replace("hsl(", "hsla(").replace(")", `, ${alpha})`);
-  }
-  if (color.startsWith("#") && color.length === 7) {
-    const r = parseInt(color.slice(1, 3), 16);
-    const g = parseInt(color.slice(3, 5), 16);
-    const b = parseInt(color.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  return color;
-}
+import { utility } from "../utility";
 
 const periodHours = {
   Day: 24,
@@ -173,7 +158,7 @@ export class SkillGraph extends BaseElement {
       // Subdued (30%-alpha) version of the line's own color instead of a
       // solid block fading to transparent -- matches the softer row
       // backgrounds upstream introduced.
-      const gradientColor = data.borderColor ? colorWithAlpha(data.borderColor, 0.3) : data.color;
+      const gradientColor = data.borderColor ? utility.colorWithAlpha(data.borderColor, 0.3) : data.color;
       return `
 <tr class="${cls}" style="background: linear-gradient(90deg, ${gradientColor} ${xpGainPercent}%, transparent ${xpGainPercent}%)">
   ${rankCell}
@@ -448,7 +433,7 @@ ${filters}
         label: playerSkillData.name,
         data: cumulativeChangeData,
         borderColor: color,
-        backgroundColor: colorWithAlpha(color, 0.12),
+        backgroundColor: utility.colorWithAlpha(color, 0.12),
         fill: true,
         tension: 0.3,
         pointBorderWidth: 0,

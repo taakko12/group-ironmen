@@ -242,9 +242,13 @@ export class LootPage extends BaseElement {
           label: member.name,
           data,
           borderColor: color,
-          backgroundColor: color,
+          backgroundColor: utility.colorWithAlpha(color, 0.12),
+          fill: true,
           borderWidth: 2,
           pointRadius: 0,
+          pointHoverBorderWidth: 2,
+          pointHoverBorderColor: "white",
+          pointHoverRadius: 5,
           stepped: true,
         };
       });
@@ -261,7 +265,14 @@ export class LootPage extends BaseElement {
         maintainAspectRatio: false,
         animation: false,
         plugins: {
-          title: { display: true, text: `Total Loot Over Time - ${LootPage.periodLabel(this.period)}` },
+          title: {
+            display: true,
+            text: `Total Loot Over Time - ${LootPage.periodLabel(this.period)}`,
+            font: {
+              size: 18,
+              family: "rsbold, ui-sans-serif, Arial, sans-serif",
+            },
+          },
           tooltip: {
             callbacks: {
               label: (tooltip) => `${tooltip.dataset.label}: ${tooltip.parsed.y.toLocaleString()} gp`,
@@ -270,7 +281,25 @@ export class LootPage extends BaseElement {
         },
         interaction: { intersect: false, mode: "index" },
         scales: {
-          y: { title: { display: true, text: "Total GP" } },
+          x: {
+            grid: {
+              drawTicks: false,
+              borderDash: [4, 4],
+            },
+          },
+          y: {
+            title: { display: true, text: "Total GP" },
+            ticks: {
+              callback: function (value) {
+                if (value >= 1000000) return (value / 1000000).toFixed(1) + "M";
+                if (value >= 1000) return (value / 1000).toFixed(1) + "k";
+                return value;
+              },
+            },
+            grid: {
+              borderDash: [4, 4],
+            },
+          },
         },
       },
       data: { labels, datasets },
