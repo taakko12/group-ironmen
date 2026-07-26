@@ -7,6 +7,7 @@ const { registerCommands } = require('./deploy-commands');
 const itemData = require('./itemData');
 const bankPings = require('./bankPings');
 const attachmentRefresh = require('./attachmentRefresh');
+const mustBankAnnounce = require('./mustBankAnnounce');
 const personality = require('./personality');
 const assistant = require('./assistant');
 
@@ -42,6 +43,7 @@ client.once('clientReady', async () => {
   itemData.start();
   bankPings.start(client);
   attachmentRefresh.start();
+  mustBankAnnounce.start(client);
 });
 
 client.on('interactionCreate', async (interaction) => {
