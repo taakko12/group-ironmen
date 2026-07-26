@@ -20,6 +20,12 @@ const { getItemName } = require('./itemData');
 // checking this often is effectively instant for a human tagging an item.
 const CHECK_INTERVAL_MS = 10 * 1000; // 10 seconds
 const TAG_NAME = 'Must Bank';
+// A real RuneLite export sets the tab's icon separately from its tagged
+// items (they're distinct tokens) -- Coins is a fixed, always-valid icon so
+// the tab's icon doesn't just become "whatever sorted first this time" and
+// so that item doesn't need to be listed twice to both set the icon and get
+// tagged.
+const ICON_ITEM_ID = 995;
 // Discord's plain-message content cap; fall back to a .txt attachment for
 // unusually long lists instead of letting the send fail outright.
 const MAX_INLINE_TAG_LENGTH = 1900;
@@ -27,8 +33,7 @@ const MAX_INLINE_TAG_LENGTH = 1900;
 let previousItemIds = null; // null until the first successful fetch
 
 function buildBankTagString(itemIds) {
-  const iconItemId = itemIds[0];
-  return ['banktags', '1', TAG_NAME, String(iconItemId), ...itemIds.map(String)].join(',');
+  return ['banktags', '1', TAG_NAME, String(ICON_ITEM_ID), ...itemIds.map(String)].join(',');
 }
 
 function setsEqual(a, b) {
