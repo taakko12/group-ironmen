@@ -63,6 +63,26 @@ skill-graph {
   padding: 1em 2em 0 2em;
 }
 
+.skill-graph__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75em;
+  padding: 0 0 0.75em 0;
+  font-size: 18px;
+  color: var(--secondary-text, #b0b0b0);
+}
+
+.skill-graph__summary span {
+  min-width: 0;
+  padding-right: 0.75em;
+  border-right: 1px solid var(--graph-grid-border);
+}
+
+.skill-graph__summary span:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+
 .skill-graph__table-scroll {
   overflow-x: auto;
 }
@@ -82,9 +102,19 @@ skill-graph {
   border-bottom: 1px solid var(--graph-grid-border);
 }
 
-.skill-graph__table-container th:nth-child(n + 2),
-.skill-graph__table-container td:nth-child(n + 2) {
+.skill-graph__table-container th:nth-child(n + 3),
+.skill-graph__table-container td:nth-child(n + 3) {
   text-align: right;
+}
+
+.skill-graph__rank-header {
+  width: 2em;
+  text-align: center;
+}
+
+.skill-graph__rank {
+  text-align: center;
+  color: var(--secondary-text, #b0b0b0);
 }
 
 .skill-graph__table-container tr {
@@ -120,11 +150,24 @@ skill-graph {
 
 .skill-graph__overall-skill-change {
   font-size: 18px;
+  color: var(--secondary-text, #b0b0b0);
 }
 
-.skill-graph__overall-skill-change > td:first-child {
+.skill-graph__player-cell {
   display: flex;
   align-items: center;
+}
+
+.skill-graph__overall-skill-change .skill-graph__player-cell {
+  padding-left: 1.5em;
+}
+
+.skill-graph__player-dot {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  margin-right: 0.5em;
 }
 
 .skill-graph__overall-skill-change img {
@@ -136,13 +179,15 @@ skill-graph {
   cursor: pointer;
 }
 
-.skill-graph__member-section--collapsible .skill-graph__member-row td:first-child::before {
+/* Targets the player-name cell by class rather than position, since it's
+   the second column now that the rank column sits in front of it. */
+.skill-graph__member-section--collapsible .skill-graph__member-row .skill-graph__player-cell::before {
   content: "\25be"; /* ▾ */
   display: inline-block;
   width: 1em;
 }
 
-.skill-graph__member-section--collapsed .skill-graph__member-row td:first-child::before {
+.skill-graph__member-section--collapsed .skill-graph__member-row .skill-graph__player-cell::before {
   content: "\25b8"; /* ▸ */
 }
 

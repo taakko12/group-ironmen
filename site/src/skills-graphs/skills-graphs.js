@@ -26,11 +26,13 @@ export class SkillsGraphs extends BaseElement {
     this.period = "Day";
 
     this.chartContainer = this.querySelector(".skills-graphs__chart-container");
-    this.periodSelect = this.querySelector(".skills-graphs__period-select");
+    this.periodButtons = this.querySelectorAll(".skills-graphs__period-btn");
     this.refreshButton = this.querySelector(".skills-graphs__refresh");
     this.skillSelect = this.querySelector(".skills-graphs__skill-select");
     this.selectedSkill = this.skillSelect.value;
-    this.eventListener(this.periodSelect, "change", this.handlePeriodChange.bind(this));
+    this.periodButtons.forEach((btn) => {
+      this.eventListener(btn, "click", this.handlePeriodChange.bind(this));
+    });
     this.eventListener(this.refreshButton, "click", this.handleRefreshClicked.bind(this));
     this.eventListener(this.skillSelect, "change", this.handleSkillSelectChange.bind(this));
 
@@ -46,8 +48,11 @@ export class SkillsGraphs extends BaseElement {
     this.subscribeOnce("get-group-data", this.createChart.bind(this));
   }
 
-  handlePeriodChange() {
-    this.period = this.periodSelect.value;
+  handlePeriodChange(event) {
+    this.period = event.currentTarget.dataset.period;
+    this.periodButtons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.period === this.period);
+    });
     this.subscribeOnce("get-group-data", this.createChart.bind(this));
   }
 

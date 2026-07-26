@@ -157,11 +157,17 @@ export class SkillGraph extends BaseElement {
       return formatXp(data.xpToNextLevel);
     };
 
-    const row = (cls, label, data, totalXpGain) => {
+    const row = (cls, label, data, totalXpGain, rank) => {
       const xpGainPercent = totalXpGain ? Math.round((data.xpGain / totalXpGain) * 100) : 0;
       const skillIcon = Skill.getIcon(label);
       const skillImg = skillIcon.length ? `<img src="${Skill.getIcon(label)}" />` : "";
+      // Sub-skill rows already have a skill icon; player rows get a dot in
+      // their own line color instead, since there's no per-player icon.
+      const colorDot = skillImg
+        ? ""
+        : `<span class="skill-graph__player-dot" style="background: ${data.borderColor}"></span>`;
       const xpHour = data.xpGain > 0 ? Math.round(data.xpGain / hours) : 0;
+      const rankCell = rank !== undefined ? `<td class="skill-graph__rank">${rank}</td>` : `<td></td>`;
       const levelChange =
         data.levelsGained > 0 ? ` <span class="skill-graph__level-up">(+${data.levelsGained})</span>` : "";
       // Subdued (30%-alpha) version of the line's own color instead of a
@@ -170,7 +176,8 @@ export class SkillGraph extends BaseElement {
       const gradientColor = data.borderColor ? colorWithAlpha(data.borderColor, 0.3) : data.color;
       return `
 <tr class="${cls}" style="background: linear-gradient(90deg, ${gradientColor} ${xpGainPercent}%, transparent ${xpGainPercent}%)">
-  <td>${skillImg}${label}</td>
+  ${rankCell}
+  <td class="skill-graph__player-cell">${skillImg}${colorDot}${label}</td>
   <td class="skill-graph__level-data">${formatLevel(data)}${levelChange}</td>
   <td class="skill-graph__xp-change-data">${data.xpGain > 0 ? "+" : ""}${data.xpGain.toLocaleString()}</td>
   <td class="skill-graph__xp-hour-data">${xpHour > 0 ? "+" : ""}${xpHour.toLocaleString()}</td>
@@ -179,13 +186,27 @@ export class SkillGraph extends BaseElement {
 `;
     };
 
-    let memberSections = [];
+    const memberSections = [];
     const memberEntriesSortedByXpGain = Object.entries(tableData).sort(
       (a, b) => b[1][this.skillName].xpGain - a[1][this.skillName].xpGain
     );
-    for (const [name, x] of memberEntriesSortedByXpGain) {
+
+    let groupTotalXpGain = 0;
+    let activeCount = 0;
+    let topContributor = null;
+    let topXpGain = 0;
+    for (let rankIdx = 0; rankIdx < memberEntriesSortedByXpGain.length; rankIdx++) {
+      const [name, x] = memberEntriesSortedByXpGain[rankIdx];
+      const xpGain = x[this.skillName].xpGain;
+      groupTotalXpGain += xpGain;
+      if (xpGain > 0) activeCount++;
+      if (xpGain > topXpGain) {
+        topXpGain = xpGain;
+        topContributor = name;
+      }
+
       const totalXpGain = x[this.skillName].totalXpGain;
-      let sectionRows = row("skill-graph__member-row", name, x[this.skillName], totalXpGain);
+      let sectionRows = row("skill-graph__member-row", name, x[this.skillName], totalXpGain, rankIdx + 1);
       let hasSubRows = false;
 
       if (this.skillName === SkillName.Overall) {
@@ -206,11 +227,42 @@ export class SkillGraph extends BaseElement {
       const collapsibleClass = hasSubRows ? " skill-graph__member-section--collapsible" : "";
       memberSections.push(`<tbody class="skill-graph__member-section${collapsibleClass}">${sectionRows}</tbody>`);
     }
+
+    const groupTotalSign = groupTotalXpGain > 0 ? "+" : "";
+    const avgGain =
+      memberEntriesSortedByXpGain.length > 0
+        ? Math.round(groupTotalXpGain / memberEntriesSortedByXpGain.length)
+        : 0;
+
+    let groupTotalLevel = 0;
+    if (this.skillName === SkillName.Overall) {
+      for (const [name] of memberEntriesSortedByXpGain) {
+        const member = this.currentGroupData.members.get(name);
+        if (member?.skills?.[SkillName.Overall]?.level) {
+          groupTotalLevel += member.skills[SkillName.Overall].level;
+        }
+      }
+    }
+
+    const summaryParts = [
+      `<span>Total XP: ${groupTotalSign}${groupTotalXpGain.toLocaleString()}</span>`,
+      `<span>Avg: ${groupTotalSign}${avgGain.toLocaleString()}</span>`,
+      `<span>Active: ${activeCount}/${memberEntriesSortedByXpGain.length}</span>`,
+    ];
+    if (topContributor) {
+      summaryParts.push(`<span>Top: ${topContributor} (+${topXpGain.toLocaleString()})</span>`);
+    }
+    if (groupTotalLevel > 0) {
+      summaryParts.push(`<span>Group total level: ${groupTotalLevel.toLocaleString()}</span>`);
+    }
+
     this.tableContainer.innerHTML = `
+<div class="skill-graph__summary">${summaryParts.join("")}</div>
 <div class="skill-graph__table-scroll">
 <table>
   <thead>
     <tr>
+      <th class="skill-graph__rank-header">#</th>
       <th>Player</th>
       <th>Level</th>
       <th>XP Change</th>
