@@ -26,9 +26,11 @@ const TAG_NAME = 'Must Bank';
 // so that item doesn't need to be listed twice to both set the icon and get
 // tagged.
 const ICON_ITEM_ID = 995;
-// Discord's plain-message content cap; fall back to a .txt attachment for
-// unusually long lists instead of letting the send fail outright.
-const MAX_INLINE_TAG_LENGTH = 1900;
+// Embed description cap is 4096; fall back to a .txt attachment for
+// unusually long lists instead of letting the whole embed get rejected.
+const MAX_INLINE_TAG_LENGTH = 3800;
+// Field value cap is 1024 -- truncate rather than risk the send failing.
+const MAX_FIELD_LENGTH = 1024;
 
 let previousItemIds = null; // null until the first successful fetch
 
@@ -38,6 +40,11 @@ function buildBankTagString(itemIds) {
 
 function setsEqual(a, b) {
   return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
+function joinTruncated(names, limit) {
+  const joined = names.join(', ');
+  return joined.length <= limit ? joined : `${joined.slice(0, limit - 1)}…`;
 }
 
 async function checkOnce(client) {
@@ -80,30 +87,25 @@ async function checkOnce(client) {
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle('📋 Required Items List Updated')
-    .setColor(0xffa500)
-    .setDescription(itemIds.map((id) => `• ${getItemName(id)}`).join('\n'))
-    .addFields({
-      name: 'How to import',
-      value:
-        "In-game: click the **+** next to your bank's tag tabs, choose **Import tag tab**, then paste the text below.",
-    });
+  // Just the net change, not the whole (potentially long) list -- Added/
+  // Removed is enough to tell what happened at a glance.
+  const embed = new EmbedBuilder().setTitle('📋 Required Items List Updated').setColor(0xffa500);
 
   if (added.length > 0) {
-    embed.addFields({ name: 'Added', value: added.map((id) => getItemName(id)).join(', ') });
+    embed.addFields({ name: 'Added', value: joinTruncated(added.map(getItemName), MAX_FIELD_LENGTH) });
   }
   if (removed.length > 0) {
-    embed.addFields({ name: 'Removed', value: removed.map((id) => getItemName(id)).join(', ') });
+    embed.addFields({ name: 'Removed', value: joinTruncated(removed.map(getItemName), MAX_FIELD_LENGTH) });
   }
 
   const tagString = buildBankTagString(itemIds);
   const messageOptions = { embeds: [embed] };
-  if (tagString.length > MAX_INLINE_TAG_LENGTH) {
-    embed.addFields({ name: 'Import string', value: 'Too long to inline -- see the attached file.' });
-    messageOptions.files = [new AttachmentBuilder(Buffer.from(tagString, 'utf-8'), { name: 'must-bank-tag.txt' })];
+  const instructions = "In-game: click the **+** next to your bank's tag tabs, choose **Import tag tab**, then paste";
+  if (tagString.length <= MAX_INLINE_TAG_LENGTH) {
+    embed.setDescription(`${instructions} this:\n\`\`\`${tagString}\`\`\``);
   } else {
-    messageOptions.content = `\`\`\`${tagString}\`\`\``;
+    embed.setDescription(`${instructions} the text from the attached file.`);
+    messageOptions.files = [new AttachmentBuilder(Buffer.from(tagString, 'utf-8'), { name: 'must-bank-tag.txt' })];
   }
 
   await channel
