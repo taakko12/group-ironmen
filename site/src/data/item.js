@@ -126,4 +126,42 @@ export class Item {
     }
     return result;
   }
+
+  // Strips trailing "(...)" qualifiers repeatedly -- charge states,
+  // potion doses, broken/degraded states, etc. -- so items that are really
+  // "the same thing" for banking purposes (Tumeken's shadow vs "(uncharged)")
+  // resolve to the same base name and can be grouped together.
+  static baseName(name) {
+    let stripped = name;
+    let previous;
+    do {
+      previous = stripped;
+      stripped = stripped.replace(/\s*\([^()]*\)\s*$/, "");
+    } while (stripped !== previous);
+    return stripped.toLowerCase();
+  }
+
+  // Built lazily (not at loadItems() time) since it scans the entire item
+  // catalog, and only the must-bank-items tagging flow needs it.
+  static variantGroups() {
+    if (!Item._variantGroups) {
+      const groups = new Map();
+      for (const details of Object.values(Item.itemDetails)) {
+        const base = Item.baseName(details.name);
+        if (!groups.has(base)) groups.set(base, []);
+        groups.get(base).push(parseInt(details.id));
+      }
+      Item._variantGroups = groups;
+    }
+    return Item._variantGroups;
+  }
+
+  // All item ids that share this item's base name (itself included), e.g.
+  // Tumeken's shadow's variantIds includes both the charged and "(uncharged)"
+  // ids. Falls back to just [itemId] for an id with no catalog entry.
+  static variantIds(itemId) {
+    const details = Item.itemDetails[itemId];
+    if (!details) return [itemId];
+    return Item.variantGroups().get(Item.baseName(details.name)) ?? [itemId];
+  }
 }

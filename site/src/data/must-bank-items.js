@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { pubsub } from "./pubsub";
+import { Item } from "./item";
 
 // Group-wide set of item ids tagged as "must be banked" — loaded once per
 // session and kept in sync locally so every item-box reflects tag changes
@@ -23,16 +24,22 @@ class MustBankItems {
     return this.ids.has(itemId);
   }
 
+  // Tags every variant of this item (e.g. tagging "Tumeken's shadow" also
+  // tags "Tumeken's shadow (uncharged)") so a group member holding whichever
+  // variant they happened to get still trips the must-bank ping and shows up
+  // in the RuneLite bank tag, instead of only the exact id someone clicked.
   async tag(itemId) {
-    this.ids.add(itemId);
+    const variantIds = Item.variantIds(itemId);
+    for (const id of variantIds) this.ids.add(id);
     pubsub.publish("must-bank-items-updated");
-    await api.tagMustBankItem(itemId);
+    await Promise.all(variantIds.map((id) => api.tagMustBankItem(id)));
   }
 
   async untag(itemId) {
-    this.ids.delete(itemId);
+    const variantIds = Item.variantIds(itemId);
+    for (const id of variantIds) this.ids.delete(id);
     pubsub.publish("must-bank-items-updated");
-    await api.untagMustBankItem(itemId);
+    await Promise.all(variantIds.map((id) => api.untagMustBankItem(id)));
   }
 }
 
