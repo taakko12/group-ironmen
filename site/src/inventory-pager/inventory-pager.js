@@ -22,12 +22,15 @@ export class InventoryPager extends BaseElement {
     this.showIndividualPricesInput = document.querySelector("#items-page__individual-items");
     this.showIndividualPrices = this.showIndividualPricesInput.checked;
     this.mustBankFilterInput = document.querySelector("#items-page__must-bank-filter");
+    this.showAllPlayersInput = document.querySelector("#items-page__show-all-players");
+    this.showAllPlayers = this.showAllPlayersInput.checked;
     this.playerFilter = document.querySelector(".items-page__player-filter");
     this.eventListener(this.searchElement, "input", this.handleSearch.bind(this));
     this.eventListener(this.sortTarget, "change", this.handleSortChange.bind(this));
     this.eventListener(this, "click", this.handleClick.bind(this));
     this.eventListener(this.showIndividualPricesInput, "change", this.handleIndividualPricesChange.bind(this));
     this.eventListener(this.mustBankFilterInput, "change", this.handleMustBankFilterChange.bind(this));
+    this.eventListener(this.showAllPlayersInput, "change", this.handleShowAllPlayersChange.bind(this));
     this.eventListener(this.playerFilter, "change", this.handlePlayerFilterChange.bind(this));
     this.subscribe("items-updated", this.handleUpdatedItems.bind(this));
     this.subscribe("must-bank-items-updated", this.handleMustBankItemsUpdated.bind(this));
@@ -69,6 +72,12 @@ export class InventoryPager extends BaseElement {
 
   handleMustBankFilterChange() {
     groupData.applyMustBankFilter(this.mustBankFilterInput.checked);
+    this.maybeRenderPage(this.currentPage, true);
+    this.render();
+  }
+
+  handleShowAllPlayersChange() {
+    this.showAllPlayers = this.showAllPlayersInput.checked;
     this.maybeRenderPage(this.currentPage, true);
     this.render();
   }
@@ -201,6 +210,7 @@ export class InventoryPager extends BaseElement {
 <inventory-item item-id="${item.id}"
                 class="rsborder rsbackground"
                 ${this.showIndividualPrices ? "individual-prices" : ""}
+                ${this.showAllPlayers ? "show-all-players" : ""}
                 ${groupData.playerFilter !== "@ALL" ? `player-filter="${groupData.playerFilter}"` : ""}>
 </inventory-item>
 `;

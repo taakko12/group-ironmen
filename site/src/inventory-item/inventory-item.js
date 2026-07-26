@@ -12,6 +12,7 @@ export class InventoryItem extends BaseElement {
     const itemId = this.getAttribute("item-id");
     this.itemId = parseInt(itemId);
     this.showIndividualItemPrices = this.hasAttribute("individual-prices");
+    this.showAllPlayers = this.hasAttribute("show-all-players");
     this.playerFilter = this.getAttribute("player-filter");
 
     const top = this.offsetTop;
@@ -52,7 +53,7 @@ export class InventoryItem extends BaseElement {
       playerHtml = this.playerHtml(this.playerFilter);
     } else {
       for (const [playerName, quantity] of Object.entries(item.quantities)) {
-        if (quantity === 0) continue;
+        if (quantity === 0 && !this.showAllPlayers) continue;
         playerHtml += this.playerHtml(playerName);
       }
     }
