@@ -2,6 +2,29 @@
 import { BaseElement } from "../base-element/base-element";
 import { Skill, SkillName } from "../data/skill";
 
+// Member colors can be either the built-in hsl() round-robin palette or a
+// user-picked hex color (site/src/edit-member/edit-member.js), so this needs
+// to handle both rather than assuming hsl() like upstream's version does.
+function colorWithAlpha(color, alpha) {
+  if (color.startsWith("hsl(")) {
+    return color.replace("hsl(", "hsla(").replace(")", `, ${alpha})`);
+  }
+  if (color.startsWith("#") && color.length === 7) {
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return color;
+}
+
+const periodHours = {
+  Day: 24,
+  Week: 168,
+  Month: 720,
+  Year: 8760,
+};
+
 export class SkillGraph extends BaseElement {
   constructor() {
     super();
@@ -41,12 +64,41 @@ export class SkillGraph extends BaseElement {
     this.createMemberFilters(dataSets);
   }
 
-  tableDataForDataSet(dataSet) {
+  tableDataForDataSet(dataSet, skillName) {
     let xpGain = dataSet.data[dataSet.data.length - 1];
     if (isNaN(xpGain)) xpGain = 0;
+
+    const totalXpData = dataSet.totalXpData || [];
+    let startingXp;
+    for (const xp of totalXpData) {
+      if (xp !== undefined) {
+        startingXp = xp;
+        break;
+      }
+    }
+    const endingXp = totalXpData[totalXpData.length - 1];
+
+    let currentLevel = null;
+    let levelsGained = 0;
+    let xpToNextLevel = null;
+
+    if (skillName !== SkillName.Overall && endingXp !== undefined) {
+      const endSkill = new Skill(skillName, endingXp);
+      currentLevel = Math.min(99, endSkill.level);
+      xpToNextLevel = endSkill.xpUntilNextLevel;
+      if (startingXp !== undefined) {
+        const startSkill = new Skill(skillName, startingXp);
+        levelsGained = Math.min(99, endSkill.level) - Math.min(99, startSkill.level);
+      }
+    }
+
     return {
       xpGain,
       color: dataSet.backgroundColor,
+      borderColor: dataSet.borderColor,
+      currentLevel,
+      levelsGained,
+      xpToNextLevel,
     };
   }
 
@@ -73,7 +125,7 @@ export class SkillGraph extends BaseElement {
         if (!tableData[dataSet.label]) {
           tableData[dataSet.label] = {};
         }
-        tableData[dataSet.label][skillName] = this.tableDataForDataSet(dataSet);
+        tableData[dataSet.label][skillName] = this.tableDataForDataSet(dataSet, skillName);
         totalXpGain += tableData[dataSet.label][skillName].xpGain;
       }
 
@@ -82,16 +134,47 @@ export class SkillGraph extends BaseElement {
       }
     }
 
+    const hours = periodHours[SkillGraph.normalizedPeriod(this.period)] ?? 1;
+
+    const formatXp = (xp) => {
+      if (xp === null || xp === undefined) return "—";
+      if (xp >= 1000000) return (xp / 1000000).toFixed(2) + "M";
+      if (xp >= 10000) return (xp / 1000).toFixed(1) + "k";
+      return xp.toLocaleString();
+    };
+
+    const formatLevel = (data) => {
+      if (data.currentLevel === null) return "—";
+      if (data.levelsGained > 0) {
+        return `${data.currentLevel - data.levelsGained} → ${data.currentLevel}`;
+      }
+      return `${data.currentLevel}`;
+    };
+
+    const formatXpToNext = (data) => {
+      if (data.xpToNextLevel === null) return "—";
+      if (data.currentLevel !== null && data.currentLevel >= 99) return "Max";
+      return formatXp(data.xpToNextLevel);
+    };
+
     const row = (cls, label, data, totalXpGain) => {
       const xpGainPercent = totalXpGain ? Math.round((data.xpGain / totalXpGain) * 100) : 0;
       const skillIcon = Skill.getIcon(label);
       const skillImg = skillIcon.length ? `<img src="${Skill.getIcon(label)}" />` : "";
+      const xpHour = data.xpGain > 0 ? Math.round(data.xpGain / hours) : 0;
+      const levelChange =
+        data.levelsGained > 0 ? ` <span class="skill-graph__level-up">(+${data.levelsGained})</span>` : "";
+      // Subdued (30%-alpha) version of the line's own color instead of a
+      // solid block fading to transparent -- matches the softer row
+      // backgrounds upstream introduced.
+      const gradientColor = data.borderColor ? colorWithAlpha(data.borderColor, 0.3) : data.color;
       return `
-<tr class="${cls}" style="background: linear-gradient(90deg, ${
-        data.color
-      } ${xpGainPercent}%, transparent ${xpGainPercent}%)">
+<tr class="${cls}" style="background: linear-gradient(90deg, ${gradientColor} ${xpGainPercent}%, transparent ${xpGainPercent}%)">
   <td>${skillImg}${label}</td>
+  <td class="skill-graph__level-data">${formatLevel(data)}${levelChange}</td>
   <td class="skill-graph__xp-change-data">${data.xpGain > 0 ? "+" : ""}${data.xpGain.toLocaleString()}</td>
+  <td class="skill-graph__xp-hour-data">${xpHour > 0 ? "+" : ""}${xpHour.toLocaleString()}</td>
+  <td class="skill-graph__xp-next-data">${formatXpToNext(data)}</td>
 </tr>
 `;
     };
@@ -124,9 +207,20 @@ export class SkillGraph extends BaseElement {
       memberSections.push(`<tbody class="skill-graph__member-section${collapsibleClass}">${sectionRows}</tbody>`);
     }
     this.tableContainer.innerHTML = `
+<div class="skill-graph__table-scroll">
 <table>
+  <thead>
+    <tr>
+      <th>Player</th>
+      <th>Level</th>
+      <th>XP Change</th>
+      <th>XP/Hr</th>
+      <th>XP to Next</th>
+    </tr>
+  </thead>
   ${memberSections.join("")}
 </table>
+</div>
 `;
 
     for (const memberRow of this.tableContainer.querySelectorAll(
@@ -204,11 +298,16 @@ ${filters}
       min = Math.min(min, dataSets[i].data[0]);
       max = Math.max(max, dataSets[i].data[dataSets[i].data.length - 1]);
     }
+    if (dataSets.length === 0) {
+      min = 0;
+      max = 1;
+    }
 
     const scales = {
       x: {
         grid: {
           drawTicks: false,
+          borderDash: [4, 4],
         },
       },
       y: {
@@ -218,6 +317,16 @@ ${filters}
         title: {
           display: true,
           text: "XP Gain",
+        },
+        ticks: {
+          callback: function (value) {
+            if (value >= 1000000) return (value / 1000000).toFixed(1) + "M";
+            if (value >= 1000) return (value / 1000).toFixed(1) + "k";
+            return value;
+          },
+        },
+        grid: {
+          borderDash: [4, 4],
         },
       },
     };
@@ -245,6 +354,10 @@ ${filters}
           title: {
             display: true,
             text: `${this.skillName} - ${this.period}`,
+            font: {
+              size: 18,
+              family: "rsbold, ui-sans-serif, Arial, sans-serif",
+            },
           },
           // Replaced by the per-member checkbox filters below the chart --
           // Chart.js's default legend shows the same name/color mapping but
@@ -283,10 +396,13 @@ ${filters}
         label: playerSkillData.name,
         data: cumulativeChangeData,
         borderColor: color,
-        backgroundColor: color,
+        backgroundColor: colorWithAlpha(color, 0.12),
+        fill: true,
+        tension: 0.3,
         pointBorderWidth: 0,
-        pointHoverBorderWidth: 0,
-        pointHoverRadius: 3,
+        pointHoverBorderWidth: 2,
+        pointHoverBorderColor: "white",
+        pointHoverRadius: 5,
         pointRadius: 0,
         borderWidth: 2,
         changeData,

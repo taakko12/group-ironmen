@@ -63,10 +63,28 @@ skill-graph {
   padding: 1em 2em 0 2em;
 }
 
+.skill-graph__table-scroll {
+  overflow-x: auto;
+}
+
 .skill-graph__table-container table {
   width: 100%;
   border-collapse: collapse;
   font-size: 20px;
+}
+
+.skill-graph__table-container th {
+  text-align: left;
+  padding: 4px 8px;
+  font-size: 16px;
+  font-weight: normal;
+  color: var(--secondary-text, #b0b0b0);
+  border-bottom: 1px solid var(--graph-grid-border);
+}
+
+.skill-graph__table-container th:nth-child(n + 2),
+.skill-graph__table-container td:nth-child(n + 2) {
+  text-align: right;
 }
 
 .skill-graph__table-container tr {
@@ -78,7 +96,7 @@ skill-graph {
 }
 
 .skill-graph__table-container td {
-  padding: 4px;
+  padding: 4px 8px;
   /* Each row's background is a hard-edged gradient of the member's chosen
      color fading to fully transparent partway across the row (see
      skill-graph.js's row()), so a single fixed text color can't stay
@@ -88,6 +106,16 @@ skill-graph {
      and is invisible enough over the default dark background to not matter
      there. */
   text-shadow: 0 0 3px rgba(0, 0, 0, 0.85), 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+.skill-graph__level-up {
+  color: var(--positive, #4caf50);
+  font-size: 0.8em;
+}
+
+.skill-graph__member-row {
+  font-weight: bold;
+  border-top: 2px solid var(--graph-grid-border);
 }
 
 .skill-graph__overall-skill-change {
