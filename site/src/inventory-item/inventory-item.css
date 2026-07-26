@@ -52,13 +52,12 @@ inventory-item.rendered {
 }
 
 .inventory-item__tag-button {
-  /* Pinned to the name column's corner instead of flowing inline after the
-     item name text -- otherwise its position depends on where the name
-     happens to wrap (worse for long two-line names), shifting it down
-     inconsistently between tiles. */
-  position: absolute;
-  top: 0;
-  right: 0;
+  /* A fixed-size flex sibling of the name link (see .inventory-item__name)
+     instead of flowing inline after the text -- that way space for it is
+     always properly reserved regardless of how the name wraps, instead of
+     guessing at a fixed padding that's wrong for some names and overlaps
+     either the wrapped text or the item picture next to it. */
+  flex: 0 0 auto;
   cursor: pointer;
   opacity: 0.35;
   filter: grayscale(100%);
@@ -98,6 +97,12 @@ input[type="checkbox"] + .inventory-item__request-label::before {
 
 .inventory-item__name {
   font-size: 20px;
-  position: relative;
-  padding-right: 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.inventory-item__name > a {
+  flex: 1 1 auto;
+  min-width: 0;
 }
