@@ -14,11 +14,7 @@
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const { getItemName } = require('./itemData');
 
-// Matches bankPings.js's own poll cadence -- a real push (server notifying
-// the bot the instant a tag changes) would need a new HTTP endpoint on the
-// bot for the server to call, which is more moving parts than this needs;
-// checking this often is effectively instant for a human tagging an item.
-const CHECK_INTERVAL_MS = 10 * 1000; // 10 seconds
+const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 const TAG_NAME = 'Must Bank';
 // A real RuneLite export sets the tab's icon separately from its tagged
 // items (they're distinct tokens) -- Coins is a fixed, always-valid icon so
