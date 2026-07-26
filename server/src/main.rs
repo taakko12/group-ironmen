@@ -85,6 +85,8 @@ async fn main() -> std::io::Result<()> {
             .service(authed::get_loot_data)
             .service(authed::add_death)
             .service(authed::get_death_data)
+            .service(authed::get_attachment_urls)
+            .service(authed::update_attachment_urls)
             .service(authed::add_storage_log_entry)
             .service(authed::get_storage_log)
             .service(authed::set_member_discord_id)

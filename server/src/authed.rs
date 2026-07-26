@@ -5,7 +5,8 @@ use crate::models::{
     AmIInGroupRequest, GroupBankPingData, GroupDeathData, GroupLootData, GroupMember,
     GroupSkillData, GroupStorageLog, MustBankItem, NameChange, NewDeath, NewLootDrop,
     NewStorageLogEntry, PendingBankPing, RecentBankPings, RenameGroupMember, RequestBank,
-    RequestBankBatch, SetMemberColor, SetMemberDiscordId, WomPlayerGains, SHARED_MEMBER,
+    RequestBankBatch, SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls,
+    WomPlayerGains, SHARED_MEMBER,
 };
 use crate::validators::{valid_hex_color, valid_name, validate_member_prop_length};
 use crate::wom;
@@ -273,6 +274,27 @@ pub async fn get_death_data(
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let death_data = db::get_death_data(&client, auth.group_id).await?;
     Ok(web::Json(death_data))
+}
+
+#[get("/attachment-urls")]
+pub async fn get_attachment_urls(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<StaleAttachments>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let result = db::get_attachment_urls(&client, auth.group_id).await?;
+    Ok(web::Json(result))
+}
+
+#[put("/attachment-urls")]
+pub async fn update_attachment_urls(
+    auth: Authenticated,
+    body: web::Json<UpdateAttachmentUrls>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::update_attachment_urls(&client, auth.group_id, &body.updates).await?;
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[post("/storage-log")]

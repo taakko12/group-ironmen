@@ -6,6 +6,7 @@ const { processLootMessage, processDeathMessage, processGroupStorageMessage } = 
 const { registerCommands } = require('./deploy-commands');
 const itemData = require('./itemData');
 const bankPings = require('./bankPings');
+const attachmentRefresh = require('./attachmentRefresh');
 const personality = require('./personality');
 const assistant = require('./assistant');
 
@@ -40,6 +41,7 @@ client.once('clientReady', async () => {
 
   itemData.start();
   bankPings.start(client);
+  attachmentRefresh.start();
 });
 
 client.on('interactionCreate', async (interaction) => {

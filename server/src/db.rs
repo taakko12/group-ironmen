@@ -1,11 +1,12 @@
 use crate::crypto::token_hash;
 use crate::error::ApiError;
 use crate::models::{
-    AggregateSkillData, BankPingEntry, CreateGroup, DeathEntry, GroupBankPingData, GroupDeathData,
-    GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, LootDropEntry,
-    MemberBankPingData, MemberDeathData, MemberLootData, MemberSkillData, NewDeath, NewLootDrop,
-    NewStorageLogEntry, PendingBankPing, RecentBankPing, RecentBankPings, StorageLogAction,
-    StorageLogEntry, SHARED_MEMBER,
+    AggregateSkillData, AttachmentUrlUpdate, BankPingEntry, CreateGroup, DeathEntry,
+    GroupBankPingData, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
+    GroupStorageLog, LootDropEntry, MemberBankPingData, MemberDeathData, MemberLootData,
+    MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPing,
+    RecentBankPings, StaleAttachment, StaleAttachments, StorageLogAction, StorageLogEntry,
+    SHARED_MEMBER,
 };
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Transaction};
@@ -649,6 +650,109 @@ ORDER BY d.recorded_at ASC
     }
 
     Ok(member_data.into_values().collect())
+}
+
+pub async fn get_attachment_urls(client: &Client, group_id: i64) -> Result<StaleAttachments, ApiError> {
+    let mut result = Vec::new();
+
+    let loot_stmt = client
+        .prepare_cached(
+            r#"
+SELECT d.id, d.screenshot_url
+FROM groupironman.loot_drops d
+INNER JOIN groupironman.members m ON m.member_id = d.member_id
+WHERE m.group_id = $1 AND d.screenshot_url IS NOT NULL
+"#,
+        )
+        .await?;
+    let loot_rows = client
+        .query(&loot_stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetAttachmentUrlsError)?;
+    for row in loot_rows {
+        result.push(StaleAttachment {
+            id: row.try_get("id")?,
+            kind: "loot_drop".to_string(),
+            url: row.try_get("screenshot_url")?,
+        });
+    }
+
+    let death_stmt = client
+        .prepare_cached(
+            r#"
+SELECT d.id, d.image_url
+FROM groupironman.deaths d
+INNER JOIN groupironman.members m ON m.member_id = d.member_id
+WHERE m.group_id = $1 AND d.image_url IS NOT NULL
+"#,
+        )
+        .await?;
+    let death_rows = client
+        .query(&death_stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetAttachmentUrlsError)?;
+    for row in death_rows {
+        result.push(StaleAttachment {
+            id: row.try_get("id")?,
+            kind: "death".to_string(),
+            url: row.try_get("image_url")?,
+        });
+    }
+
+    Ok(result)
+}
+
+const MAX_BATCH_ATTACHMENT_UPDATES: usize = 100;
+
+pub async fn update_attachment_urls(
+    client: &Client,
+    group_id: i64,
+    updates: &[AttachmentUrlUpdate],
+) -> Result<(), ApiError> {
+    if updates.is_empty() || updates.len() > MAX_BATCH_ATTACHMENT_UPDATES {
+        return Err(ApiError::GroupMemberValidationError(format!(
+            "updates length violated range constraint 1..={} actual={}",
+            MAX_BATCH_ATTACHMENT_UPDATES,
+            updates.len()
+        )));
+    }
+
+    // Scoped to this group's own members (via the join) so one group's token
+    // can't be used to overwrite another group's rows by guessing ids.
+    let loot_stmt = client
+        .prepare_cached(
+            r#"
+UPDATE groupironman.loot_drops d
+SET screenshot_url = $1
+FROM groupironman.members m
+WHERE d.member_id = m.member_id AND m.group_id = $2 AND d.id = $3
+"#,
+        )
+        .await?;
+    let death_stmt = client
+        .prepare_cached(
+            r#"
+UPDATE groupironman.deaths d
+SET image_url = $1
+FROM groupironman.members m
+WHERE d.member_id = m.member_id AND m.group_id = $2 AND d.id = $3
+"#,
+        )
+        .await?;
+
+    for update in updates {
+        let stmt = match update.kind.as_str() {
+            "loot_drop" => &loot_stmt,
+            "death" => &death_stmt,
+            _ => continue,
+        };
+        client
+            .execute(stmt, &[&update.url, &group_id, &update.id])
+            .await
+            .map_err(ApiError::UpdateAttachmentUrlsError)?;
+    }
+
+    Ok(())
 }
 
 pub async fn add_death(client: &Client, group_id: i64, death: &NewDeath) -> Result<(), ApiError> {

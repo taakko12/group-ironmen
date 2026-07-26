@@ -52,6 +52,10 @@ pub enum ApiError {
     AddStorageLogError(tokio_postgres::error::Error),
     #[from(ignore)]
     GetStorageLogError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    GetAttachmentUrlsError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    UpdateAttachmentUrlsError(tokio_postgres::error::Error),
     GroupFullError,
     UreqError(ureq::Error),
     GroupMemberValidationError(String),
@@ -99,6 +103,12 @@ impl ResponseError for ApiError {
             ApiError::GetBankPingDataError(ref err) => handle_pg_error(err, "GetBankPingDataError"),
             ApiError::AddStorageLogError(ref err) => handle_pg_error(err, "AddStorageLogError"),
             ApiError::GetStorageLogError(ref err) => handle_pg_error(err, "GetStorageLogError"),
+            ApiError::GetAttachmentUrlsError(ref err) => {
+                handle_pg_error(err, "GetAttachmentUrlsError")
+            }
+            ApiError::UpdateAttachmentUrlsError(ref err) => {
+                handle_pg_error(err, "UpdateAttachmentUrlsError")
+            }
             ApiError::DeleteGroupMemberError(ref err) => {
                 handle_pg_error(err, "DeleteGroupMemberError")
             }

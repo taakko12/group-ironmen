@@ -142,6 +142,33 @@ pub struct MemberDeathData {
 }
 pub type GroupDeathData = Vec<MemberDeathData>;
 
+// Discord CDN attachment URLs are signed with an expiring `ex` timestamp, so
+// screenshot_url (loot_drops) / image_url (deaths) go dead a day or so after
+// being captured. The bot periodically fetches these, refreshes any that are
+// near expiry via Discord's attachments/refresh-urls endpoint, and writes
+// the new URLs back through update_attachment_urls below.
+#[derive(Serialize)]
+pub struct StaleAttachment {
+    pub id: i64,
+    /// "loot_drop" or "death" -- which table `id` refers to.
+    pub kind: String,
+    pub url: String,
+}
+pub type StaleAttachments = Vec<StaleAttachment>;
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct AttachmentUrlUpdate {
+    pub id: i64,
+    pub kind: String,
+    pub url: String,
+}
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateAttachmentUrls {
+    pub updates: Vec<AttachmentUrlUpdate>,
+}
+
 #[derive(Serialize)]
 pub struct BankPingEntry {
     pub reason: String,
