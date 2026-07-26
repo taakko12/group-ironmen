@@ -14,7 +14,11 @@
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const { getItemName } = require('./itemData');
 
-const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+// Matches bankPings.js's own poll cadence -- a real push (server notifying
+// the bot the instant a tag changes) would need a new HTTP endpoint on the
+// bot for the server to call, which is more moving parts than this needs;
+// checking this often is effectively instant for a human tagging an item.
+const CHECK_INTERVAL_MS = 10 * 1000; // 10 seconds
 const TAG_NAME = 'Must Bank';
 // Discord's plain-message content cap; fall back to a .txt attachment for
 // unusually long lists instead of letting the send fail outright.
