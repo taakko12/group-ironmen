@@ -39,6 +39,14 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/must-bank-items`;
   }
 
+  get goalsUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/goals`;
+  }
+
+  get goalDoneUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/goal-done`;
+  }
+
   get requestBankUrl() {
     return `${this.baseUrl}/group/${this.groupName}/request-bank`;
   }
@@ -304,6 +312,54 @@ class Api {
   async untagMustBankItem(itemId) {
     const response = await fetch(this.mustBankItemsUrl, {
       body: JSON.stringify({ item_id: itemId }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "DELETE",
+    });
+
+    return response;
+  }
+
+  async getGoals() {
+    const response = await fetch(this.goalsUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
+  }
+
+  async addGoal(description, addedBy) {
+    const response = await fetch(this.goalsUrl, {
+      body: JSON.stringify({ description, added_by: addedBy }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "POST",
+    });
+
+    return response;
+  }
+
+  async setGoalDone(id, done) {
+    const response = await fetch(this.goalDoneUrl, {
+      body: JSON.stringify({ id, done }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "PUT",
+    });
+
+    return response;
+  }
+
+  async deleteGoal(id) {
+    const response = await fetch(this.goalsUrl, {
+      body: JSON.stringify({ id }),
       headers: {
         "Content-Type": "application/json",
         Authorization: this.groupToken,

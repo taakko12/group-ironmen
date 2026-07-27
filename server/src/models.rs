@@ -255,6 +255,36 @@ pub struct MustBankItem {
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+pub struct AddGoal {
+    pub description: String,
+    pub added_by: String,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct SetGoalDone {
+    pub id: i64,
+    pub done: bool,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct GoalId {
+    pub id: i64,
+}
+
+#[derive(Serialize)]
+pub struct Goal {
+    pub id: i64,
+    pub description: String,
+    pub added_by: String,
+    pub done: bool,
+    pub created_at: DateTime<Utc>,
+}
+pub type GroupGoals = Vec<Goal>;
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct RequestBank {
     pub member_name: String,
     pub item_id: i32,

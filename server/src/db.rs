@@ -1,7 +1,7 @@
 use crate::crypto::token_hash;
 use crate::error::ApiError;
 use crate::models::{
-    AggregateSkillData, AttachmentUrlUpdate, BankPingEntry, CreateGroup, DeathEntry,
+    AggregateSkillData, AttachmentUrlUpdate, BankPingEntry, CreateGroup, DeathEntry, Goal,
     GroupBankPingData, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
     GroupStorageLog, LootDropEntry, MemberBankPingData, MemberDeathData, MemberLootData,
     MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPing,
@@ -1250,6 +1250,75 @@ pub async fn get_must_bank_items(client: &Client, group_id: i64) -> Result<Vec<i
     Ok(result)
 }
 
+pub async fn add_goal(
+    client: &Client,
+    group_id: i64,
+    description: &str,
+    added_by: &str,
+) -> Result<i64, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            "INSERT INTO groupironman.goals (group_id, description, added_by) VALUES ($1, $2, $3) RETURNING id",
+        )
+        .await?;
+    let row = client
+        .query_one(&stmt, &[&group_id, &description, &added_by])
+        .await
+        .map_err(ApiError::GoalError)?;
+    Ok(row.try_get("id")?)
+}
+
+pub async fn set_goal_done(
+    client: &Client,
+    group_id: i64,
+    id: i64,
+    done: bool,
+) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached("UPDATE groupironman.goals SET done=$1 WHERE id=$2 AND group_id=$3")
+        .await?;
+    client
+        .execute(&stmt, &[&done, &id, &group_id])
+        .await
+        .map_err(ApiError::GoalError)?;
+    Ok(())
+}
+
+pub async fn delete_goal(client: &Client, group_id: i64, id: i64) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached("DELETE FROM groupironman.goals WHERE id=$1 AND group_id=$2")
+        .await?;
+    client
+        .execute(&stmt, &[&id, &group_id])
+        .await
+        .map_err(ApiError::GoalError)?;
+    Ok(())
+}
+
+pub async fn get_goals(client: &Client, group_id: i64) -> Result<Vec<Goal>, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            "SELECT id, description, added_by, done, created_at FROM groupironman.goals WHERE group_id=$1 ORDER BY done ASC, created_at DESC",
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GoalError)?;
+
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        result.push(Goal {
+            id: row.try_get("id")?,
+            description: row.try_get("description")?,
+            added_by: row.try_get("added_by")?,
+            done: row.try_get("done")?,
+            created_at: row.try_get("created_at")?,
+        });
+    }
+    Ok(result)
+}
+
 pub async fn add_manual_bank_ping(
     client: &Client,
     group_id: i64,
@@ -2242,6 +2311,36 @@ ADD COLUMN IF NOT EXISTS potion_storage INTEGER[]
         create_timestamp_trigger(&transaction, "potion_storage").await?;
 
         commit_migration(&transaction, "add_potion_storage").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "create_goals_table").await? {
+        let transaction = client.transaction().await?;
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.goals (
+    id BIGSERIAL PRIMARY KEY,
+    group_id BIGINT NOT NULL REFERENCES groupironman.groups(group_id),
+    description TEXT NOT NULL,
+    added_by TEXT NOT NULL,
+    done BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"#,
+                &[],
+            )
+            .await?;
+        transaction
+            .execute(
+                r#"
+CREATE INDEX IF NOT EXISTS goals_group_id_idx ON groupironman.goals (group_id);
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "create_goals_table").await?;
         transaction.commit().await?;
     }
 

@@ -41,6 +41,8 @@ pub enum ApiError {
     #[from(ignore)]
     MustBankItemError(tokio_postgres::error::Error),
     #[from(ignore)]
+    GoalError(tokio_postgres::error::Error),
+    #[from(ignore)]
     RequestBankError(tokio_postgres::error::Error),
     #[from(ignore)]
     PollBankPingsError(tokio_postgres::error::Error),
@@ -95,6 +97,7 @@ impl ResponseError for ApiError {
             }
             ApiError::SetMemberColorError(ref err) => handle_pg_error(err, "SetMemberColorError"),
             ApiError::MustBankItemError(ref err) => handle_pg_error(err, "MustBankItemError"),
+            ApiError::GoalError(ref err) => handle_pg_error(err, "GoalError"),
             ApiError::RequestBankError(ref err) => handle_pg_error(err, "RequestBankError"),
             ApiError::PollBankPingsError(ref err) => handle_pg_error(err, "PollBankPingsError"),
             ApiError::GetRecentBankPingsError(ref err) => {
