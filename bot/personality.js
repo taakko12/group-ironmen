@@ -115,7 +115,7 @@ async function maybeReply(message) {
   try {
     await message.channel.sendTyping().catch(() => {});
     const reply = await generateReply(message.channelId);
-    if (reply) await message.reply(reply);
+    if (reply) await message.channel.send(reply);
   } catch (err) {
     console.error(`[personality] Failed to generate reply: ${err.message}`);
   }
