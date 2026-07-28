@@ -21,8 +21,13 @@ export class DashboardPage extends BaseElement {
     this.cardsContainer = this.querySelector(".dashboard-page__cards");
     this.refreshButton = this.querySelector(".dashboard-page__refresh");
     this.periodSelect = this.querySelector(".dashboard-page__period-select");
+    this.lightbox = this.querySelector(".dashboard-page__lightbox");
+    this.lightboxFrame = this.querySelector(".dashboard-page__lightbox-frame");
+    this.lightboxImage = this.querySelector(".dashboard-page__lightbox-image");
     this.eventListener(this.refreshButton, "click", this.handleRefreshClicked.bind(this));
     this.eventListener(this.periodSelect, "change", this.handlePeriodChange.bind(this));
+    this.eventListener(this.lightbox, "click", this.handleLightboxClick.bind(this));
+    this.eventListener(document, "keydown", this.handleLightboxKeydown.bind(this));
 
     this.subscribeOnce("get-group-data", this.load.bind(this));
     this.liveRefreshInterval = window.setInterval(this.handleLiveRefresh.bind(this), LIVE_REFRESH_INTERVAL_MS);
@@ -134,6 +139,9 @@ export class DashboardPage extends BaseElement {
     for (const subtab of this.cardsContainer.querySelectorAll(".dashboard-page__stats-subtab")) {
       this.eventListener(subtab, "click", this.handleStatsSubtabClick.bind(this));
     }
+    for (const link of this.cardsContainer.querySelectorAll(".dashboard-page__screenshot-link")) {
+      this.eventListener(link, "click", this.handleScreenshotClick.bind(this));
+    }
 
     this.restoreActiveTabs(activeTabs);
   }
@@ -191,6 +199,98 @@ export class DashboardPage extends BaseElement {
     }
   }
 
+  handleScreenshotClick(event) {
+    const img = event.currentTarget.querySelector("img");
+    if (img) this.openLightbox(img);
+  }
+
+  handleLightboxClick(event) {
+    const target = event.target;
+    const clickedClose = target.closest(".dashboard-page__lightbox-close");
+    const clickedBackdropOrImage = target === this.lightbox || target === this.lightboxImage;
+    if (clickedClose || clickedBackdropOrImage) {
+      this.closeLightbox();
+    }
+  }
+
+  handleLightboxKeydown(event) {
+    if (event.key === "Escape" && this.lightbox.classList.contains("dashboard-page__lightbox--visible")) {
+      this.closeLightbox();
+    }
+  }
+
+  // Classic FLIP: let the frame lay out at its natural full-size position
+  // first, measure the delta back to the thumbnail that was clicked, jump
+  // there instantly (no transition), then clear the transform so the CSS
+  // transition animates it growing out of the thumbnail's exact position
+  // instead of just fading in centered on the screen.
+  static flipDelta(sourceRect, targetRect) {
+    return {
+      scaleX: sourceRect.width / targetRect.width,
+      scaleY: sourceRect.height / targetRect.height,
+      translateX: sourceRect.left + sourceRect.width / 2 - (targetRect.left + targetRect.width / 2),
+      translateY: sourceRect.top + sourceRect.height / 2 - (targetRect.top + targetRect.height / 2),
+    };
+  }
+
+  openLightbox(sourceImg) {
+    const sourceRect = sourceImg.getBoundingClientRect();
+    this.lightboxSourceImg = sourceImg;
+    this.lightboxImage.src = sourceImg.currentSrc || sourceImg.src;
+    this.lightbox.classList.add("dashboard-page__lightbox--visible");
+
+    requestAnimationFrame(() => {
+      const targetRect = this.lightboxFrame.getBoundingClientRect();
+      const { scaleX, scaleY, translateX, translateY } = DashboardPage.flipDelta(sourceRect, targetRect);
+
+      this.lightboxFrame.style.transition = "none";
+      this.lightboxFrame.style.opacity = "0.4";
+      this.lightboxFrame.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`;
+
+      requestAnimationFrame(() => {
+        this.lightboxFrame.style.transition = "";
+        this.lightboxFrame.style.opacity = "1";
+        this.lightboxFrame.style.transform = "none";
+        this.lightbox.classList.add("dashboard-page__lightbox--open");
+      });
+    });
+  }
+
+  closeLightbox() {
+    if (!this.lightbox.classList.contains("dashboard-page__lightbox--visible")) return;
+    this.lightbox.classList.remove("dashboard-page__lightbox--open");
+
+    const sourceImg = this.lightboxSourceImg;
+    if (sourceImg && sourceImg.isConnected) {
+      const sourceRect = sourceImg.getBoundingClientRect();
+      const targetRect = this.lightboxFrame.getBoundingClientRect();
+      const { scaleX, scaleY, translateX, translateY } = DashboardPage.flipDelta(sourceRect, targetRect);
+      this.lightboxFrame.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`;
+      this.lightboxFrame.style.opacity = "0";
+    } else {
+      // The card this screenshot belonged to was rebuilt by a background
+      // refresh while the lightbox was open -- nothing sane to shrink back
+      // into, so just fade/scale out in place instead of erroring.
+      this.lightboxFrame.style.transform = "scale(0.85)";
+      this.lightboxFrame.style.opacity = "0";
+    }
+
+    const frame = this.lightboxFrame;
+    const lightbox = this.lightbox;
+    const lightboxImage = this.lightboxImage;
+    const onTransitionEnd = (event) => {
+      if (event.target !== frame || event.propertyName !== "transform") return;
+      frame.removeEventListener("transitionend", onTransitionEnd);
+      lightbox.classList.remove("dashboard-page__lightbox--visible");
+      frame.style.transition = "";
+      frame.style.transform = "";
+      frame.style.opacity = "";
+      lightboxImage.src = "";
+    };
+    frame.addEventListener("transitionend", onTransitionEnd);
+    this.lightboxSourceImg = null;
+  }
+
   static totalXpHtml(gains) {
     if (!gains || !gains.xp_gained) return '<span class="dashboard-page__no-data">No XP gained</span>';
     return `+${gains.xp_gained.toLocaleString()} XP`;
@@ -233,11 +333,12 @@ export class DashboardPage extends BaseElement {
     return DashboardPage.activityHtml(death.image_url, label, death.message_link);
   }
 
-  // Clicking the screenshot opens the raw image directly; a small corner
-  // button opens the original Discord message instead, so both actions are
-  // available without an oversized "View in Discord" label cluttering the
-  // card. When there's no screenshot to anchor it to, the Discord link
-  // falls back to a small text link instead of a floating overlay.
+  // Clicking the screenshot expands it in place (see openLightbox); a small
+  // corner button opens the original Discord message instead, so both
+  // actions are available without an oversized "View in Discord" label
+  // cluttering the card. When there's no screenshot to anchor it to, the
+  // Discord link falls back to a small text link instead of a floating
+  // overlay.
   static activityHtml(imageUrl, label, messageLink) {
     let media = "";
     if (imageUrl) {
@@ -246,9 +347,9 @@ export class DashboardPage extends BaseElement {
         : "";
       media = `
 <div class="dashboard-page__screenshot-wrap">
-  <a class="dashboard-page__screenshot-link" href="${imageUrl}" target="_blank" rel="noopener">
+  <button type="button" class="dashboard-page__screenshot-link" aria-label="View full screenshot">
     <img class="dashboard-page__screenshot" src="${imageUrl}" loading="lazy" onerror="this.closest('.dashboard-page__screenshot-wrap').style.display='none'" />
-  </a>
+  </button>
   ${discordOverlay}
 </div>`;
     }
