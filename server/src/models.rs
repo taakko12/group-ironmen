@@ -255,6 +255,12 @@ pub struct MustBankItem {
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+pub struct SetBankPingsEnabled {
+    pub enabled: bool,
+}
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AddGoal {
     pub description: String,
     pub added_by: String,

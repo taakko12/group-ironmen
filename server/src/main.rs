@@ -94,6 +94,8 @@ async fn main() -> std::io::Result<()> {
             .service(authed::add_must_bank_item)
             .service(authed::remove_must_bank_item)
             .service(authed::get_must_bank_items)
+            .service(authed::get_bank_pings_enabled)
+            .service(authed::set_bank_pings_enabled)
             .service(authed::get_goals)
             .service(authed::add_goal)
             .service(authed::set_goal_done)

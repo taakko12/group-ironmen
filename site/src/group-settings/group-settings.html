@@ -27,4 +27,13 @@
       <label for="style__dark">Dark</label>
     </div>
   </fieldset>
+
+  <h3>Discord notifications</h3>
+  <fieldset class="group-settings__notifications">
+    <legend>Must-bank pings</legend>
+    <div>
+      <input id="bank-pings-enabled" class="group-settings__bank-pings-enabled" type="checkbox" ${bankPingsEnabled ? 'checked' : ''} />
+      <label for="bank-pings-enabled">Ping members on Discord when they go offline holding a "must bank" item</label>
+    </div>
+  </fieldset>
 </div>

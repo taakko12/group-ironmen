@@ -1216,6 +1216,28 @@ pub async fn remove_must_bank_item(
     Ok(())
 }
 
+pub async fn get_bank_pings_enabled(client: &Client, group_id: i64) -> Result<bool, ApiError> {
+    let stmt = client
+        .prepare_cached("SELECT bank_pings_enabled FROM groupironman.groups WHERE group_id=$1")
+        .await?;
+    let row = client
+        .query_one(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::BankPingsSettingError)?;
+    Ok(row.try_get("bank_pings_enabled")?)
+}
+
+pub async fn set_bank_pings_enabled(client: &Client, group_id: i64, enabled: bool) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached("UPDATE groupironman.groups SET bank_pings_enabled=$1 WHERE group_id=$2")
+        .await?;
+    client
+        .execute(&stmt, &[&enabled, &group_id])
+        .await
+        .map_err(ApiError::BankPingsSettingError)?;
+    Ok(())
+}
+
 pub async fn get_group_member_names(
     client: &Client,
     group_id: i64,
@@ -1420,25 +1442,38 @@ fn decode_item_ids(raw: &Option<Vec<i32>>) -> HashSet<i32> {
     ids
 }
 
-// Both thresholds measure the same thing (time since last_updated), so this
-// is effectively 20 extra minutes on top of the frontend's 20-minute
-// "inactive" indicator (site/src/data/member-data.js, which itself matches
-// OSRS's max AFK auto-logout timer) -- worst case, someone who walks away
-// mid-session gets pinged 40 minutes after their last activity.
+// This threshold measures time since last_updated, so it's effectively 20
+// extra minutes on top of the frontend's 20-minute "inactive" indicator
+// (site/src/data/member-data.js, which itself matches OSRS's max AFK
+// auto-logout timer) -- worst case, someone who walks away mid-session gets
+// pinged 40 minutes after their last activity.
 const INACTIVE_THRESHOLD_MINUTES: i64 = 40;
-const BANK_PING_COOLDOWN_HOURS: i64 = 6;
 
 /// Detects members who have been inactive for over `INACTIVE_THRESHOLD_MINUTES`
-/// while still holding a tagged "must bank" item, records new offline pings
-/// for them (deduped via a cooldown window), then drains and returns every
-/// undelivered ping (offline + manual) for the group. Excludes `@SHARED`
-/// (the virtual shared-storage row) -- it has no Discord ID to ping and
-/// "going offline" doesn't mean anything for it, so including it just
-/// produced dead rows.
+/// while still holding a tagged "must bank" item, records a new offline ping
+/// for them, then drains and returns every undelivered ping (offline +
+/// manual) for the group. Excludes `@SHARED` (the virtual shared-storage
+/// row) -- it has no Discord ID to ping and "going offline" doesn't mean
+/// anything for it, so including it just produced dead rows.
+///
+/// A new offline ping is only queued once per continuous offline stretch:
+/// deduped against `last_updated` rather than a fixed cooldown, so someone
+/// who's been offline all night holding the same item gets pinged exactly
+/// once, not re-pinged every few hours until they notice. They become
+/// eligible for another ping on this item only after coming back online
+/// (which advances `last_updated` past the earlier ping) and going inactive
+/// again while still holding it.
+///
+/// New offline pings are skipped entirely while the group's
+/// `bank_pings_enabled` setting is off (see `get_bank_pings_enabled`,
+/// toggled from the site's group settings page) -- already-queued manual
+/// pings still drain and deliver normally, since those were explicitly
+/// requested rather than being the automated noise the toggle is for.
 pub async fn poll_bank_pings(client: &Client, group_id: i64) -> Result<Vec<PendingBankPing>, ApiError> {
     let must_bank_items: HashSet<i32> = get_must_bank_items(client, group_id).await?.into_iter().collect();
+    let bank_pings_enabled = get_bank_pings_enabled(client, group_id).await?;
 
-    if !must_bank_items.is_empty() {
+    if bank_pings_enabled && !must_bank_items.is_empty() {
         let stmt = client
             .prepare_cached(
                 r#"
@@ -1457,18 +1492,18 @@ FROM groupironman.members WHERE group_id=$1 AND member_name != $2
             .map_err(ApiError::PollBankPingsError)?;
 
         let now = Utc::now();
-        let insert_sql = format!(
-            r#"
+        let insert_stmt = client
+            .prepare_cached(
+                r#"
 INSERT INTO groupironman.bank_pings (member_id, item_id, reason)
 SELECT $1, $2, 'offline'
 WHERE NOT EXISTS (
     SELECT 1 FROM groupironman.bank_pings
-    WHERE member_id=$1 AND item_id=$2 AND reason='offline' AND created_at > NOW() - INTERVAL '{} hours'
+    WHERE member_id=$1 AND item_id=$2 AND reason='offline' AND created_at > $3
 )
 "#,
-            BANK_PING_COOLDOWN_HOURS
-        );
-        let insert_stmt = client.prepare_cached(&insert_sql).await?;
+            )
+            .await?;
 
         for row in rows {
             let last_updated: Option<DateTime<Utc>> = row.try_get("last_updated").ok();
@@ -1479,6 +1514,8 @@ WHERE NOT EXISTS (
             if !is_inactive {
                 continue;
             }
+            // Safe: is_inactive is only true when last_updated was Some above.
+            let last_updated = last_updated.unwrap();
 
             let member_id: i64 = row.try_get("member_id")?;
             let equipment: Option<Vec<i32>> = row.try_get("equipment").ok();
@@ -1491,7 +1528,7 @@ WHERE NOT EXISTS (
 
             for item_id in held_ids.intersection(&must_bank_items) {
                 client
-                    .execute(&insert_stmt, &[&member_id, item_id])
+                    .execute(&insert_stmt, &[&member_id, item_id, &last_updated])
                     .await
                     .map_err(ApiError::PollBankPingsError)?;
             }
@@ -2341,6 +2378,21 @@ CREATE INDEX IF NOT EXISTS goals_group_id_idx ON groupironman.goals (group_id);
             .await?;
 
         commit_migration(&transaction, "create_goals_table").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "add_bank_pings_enabled_column").await? {
+        let transaction = client.transaction().await?;
+        transaction
+            .execute(
+                r#"
+ALTER TABLE groupironman.groups ADD COLUMN IF NOT EXISTS bank_pings_enabled BOOLEAN NOT NULL DEFAULT TRUE
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "add_bank_pings_enabled_column").await?;
         transaction.commit().await?;
     }
 

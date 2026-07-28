@@ -1,5 +1,6 @@
 import { BaseElement } from "../base-element/base-element";
 import { appearance } from "../appearance";
+import { bankPingsSetting } from "../data/bank-pings-setting";
 
 export class GroupSettings extends BaseElement {
   constructor() {
@@ -10,6 +11,7 @@ export class GroupSettings extends BaseElement {
   html() {
     const selectedPanelDockSide = appearance.getLayout();
     const style = appearance.getTheme();
+    const bankPingsEnabled = bankPingsSetting.enabled;
     return `{{group-settings.html}}`;
   }
   /* eslint-enable no-unused-vars */
@@ -20,9 +22,12 @@ export class GroupSettings extends BaseElement {
     this.memberSection = this.querySelector(".group-settings__members");
     this.panelDockSide = this.querySelector(".group-settings__panels");
     this.appearanceStyle = this.querySelector(".group-settings__style");
+    this.bankPingsToggle = this.querySelector(".group-settings__bank-pings-enabled");
     this.subscribe("members-updated", this.handleUpdatedMembers.bind(this));
+    this.subscribe("bank-pings-enabled-updated", this.handleBankPingsEnabledUpdated.bind(this));
     this.eventListener(this.panelDockSide, "change", this.handlePanelDockSideChange.bind(this));
     this.eventListener(this.appearanceStyle, "change", this.handleStyleChange.bind(this));
+    this.eventListener(this.bankPingsToggle, "change", this.handleBankPingsToggleChange.bind(this));
   }
 
   disconnectedCallback() {
@@ -42,6 +47,14 @@ export class GroupSettings extends BaseElement {
     } else {
       appearance.setLayout("row");
     }
+  }
+
+  handleBankPingsToggleChange() {
+    bankPingsSetting.setEnabled(this.bankPingsToggle.checked);
+  }
+
+  handleBankPingsEnabledUpdated(enabled) {
+    this.bankPingsToggle.checked = enabled;
   }
 
   handleUpdatedMembers(members) {

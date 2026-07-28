@@ -39,6 +39,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/must-bank-items`;
   }
 
+  get bankPingsEnabledUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/bank-pings-enabled`;
+  }
+
   get goalsUrl() {
     return `${this.baseUrl}/group/${this.groupName}/goals`;
   }
@@ -317,6 +321,28 @@ class Api {
         Authorization: this.groupToken,
       },
       method: "DELETE",
+    });
+
+    return response;
+  }
+
+  async getBankPingsEnabled() {
+    const response = await fetch(this.bankPingsEnabledUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
+  }
+
+  async setBankPingsEnabled(enabled) {
+    const response = await fetch(this.bankPingsEnabledUrl, {
+      body: JSON.stringify({ enabled }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "PUT",
     });
 
     return response;

@@ -5,8 +5,9 @@ use crate::models::{
     AddGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData, GroupGoals,
     GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, MustBankItem, NameChange,
     NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPings,
-    RenameGroupMember, RequestBank, RequestBankBatch, SetGoalDone, SetMemberColor,
-    SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls, WomPlayerGains, SHARED_MEMBER,
+    RenameGroupMember, RequestBank, RequestBankBatch, SetBankPingsEnabled, SetGoalDone,
+    SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls, WomPlayerGains,
+    SHARED_MEMBER,
 };
 use crate::validators::{valid_hex_color, valid_name, validate_member_prop_length, ArrayFormat};
 use crate::wom;
@@ -456,6 +457,27 @@ pub async fn get_must_bank_items(
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let items = db::get_must_bank_items(&client, auth.group_id).await?;
     Ok(web::Json(items))
+}
+
+#[get("/bank-pings-enabled")]
+pub async fn get_bank_pings_enabled(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<bool>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let enabled = db::get_bank_pings_enabled(&client, auth.group_id).await?;
+    Ok(web::Json(enabled))
+}
+
+#[put("/bank-pings-enabled")]
+pub async fn set_bank_pings_enabled(
+    auth: Authenticated,
+    body: web::Json<SetBankPingsEnabled>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::set_bank_pings_enabled(&client, auth.group_id, body.enabled).await?;
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[get("/goals")]

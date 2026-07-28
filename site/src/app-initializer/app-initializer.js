@@ -8,6 +8,7 @@ import { loadingScreenManager } from "../loading-screen/loading-screen-manager";
 import { exampleData } from "../data/example-data";
 import { AchievementDiary } from "../data/diaries";
 import { mustBankItems } from "../data/must-bank-items";
+import { bankPingsSetting } from "../data/bank-pings-setting";
 
 export class AppInitializer extends BaseElement {
   constructor() {
@@ -66,7 +67,7 @@ export class AppInitializer extends BaseElement {
     const firstDataEvent = pubsub.waitUntilNextEvent("get-group-data", false);
     await api.enable(group.groupName, group.groupToken);
     await firstDataEvent;
-    await mustBankItems.load();
+    await Promise.all([mustBankItems.load(), bankPingsSetting.load()]);
   }
 }
 
