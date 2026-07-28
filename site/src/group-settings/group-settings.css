@@ -4,7 +4,7 @@ group-settings {
 
 .group-settings__container {
   padding: 8px 12px;
-  max-width: 500px;
+  max-width: 900px;
   width: 100%;
 }
 
@@ -12,6 +12,19 @@ group-settings {
   padding-left: 1em;
 }
 
-.group-settings__members edit-member {
-  margin-bottom: 1em;
+.group-settings__members {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 4px 24px;
+}
+
+.group-settings__preferences {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.group-settings__preferences fieldset {
+  flex: 1 1 220px;
+  margin: 0;
 }
