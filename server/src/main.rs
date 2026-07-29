@@ -112,7 +112,8 @@ async fn main() -> std::io::Result<()> {
             .service(authed::add_name_change)
             .service(authed::get_wom_gains)
             .service(authed::get_wom_boss_kc)
-            .service(authed::get_collection_log);
+            .service(authed::get_collection_log)
+            .service(live::live);
         let json_config = web::JsonConfig::default().limit(100000);
         let cors = Cors::default()
             .allow_any_origin()
@@ -137,10 +138,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(tx.clone()))
             .app_data(web::Data::new(live_tx.clone()))
-            .app_data(web::Data::new(auth_cache.clone()))
             .service(authed_scope)
             .service(unauthed_scope)
-            .service(live::live)
     })
     .bind(("0.0.0.0", 8080))?
     .run()

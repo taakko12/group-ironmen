@@ -9,6 +9,7 @@ use futures_util::{
     future::{ready, LocalBoxFuture, Ready},
     FutureExt,
 };
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     rc::Rc,
@@ -147,9 +148,9 @@ impl FromRequest for Authenticated {
     }
 }
 /// Authenticate a group token supplied outside the normal Authorization
-/// header. The browser's EventSource API can't set custom request headers,
-/// so /live (see live.rs) takes the token as a query param instead and uses
-/// this directly, bypassing AuthenticateMiddleware entirely.
+/// header, checked against the cache first, falling back to the database
+/// (and populating the cache) on a miss. Shared by AuthenticateMiddleware's
+/// header path and its query-param fallback (see call() below).
 pub async fn authenticate_token(
     db_pool: &Pool,
     cache: &Arc<AuthenticationCache>,
@@ -178,29 +179,9 @@ pub struct AuthenticateMiddleware<S> {
     cache: Arc<AuthenticationCache>,
 }
 
-/// Authenticate against the database on cache miss.
-/// Returns Ok(group_id) on success, or an error response to return directly.
-async fn authenticate_via_db(
-    req: &ServiceRequest,
-    group_name: &str,
-    token: &str,
-    token_hash: &str,
-    cache: &AuthenticationCache,
-) -> Result<i64, actix_web::Error> {
-    let db_pool = req
-        .app_data::<web::Data<Pool>>()
-        .ok_or_else(|| actix_web::error::ErrorInternalServerError(""))?;
-    let client = db_pool
-        .get()
-        .await
-        .map_err(|_| actix_web::error::ErrorInternalServerError(""))?;
-
-    let group_id = db::get_group(&client, group_name, token)
-        .await
-        .map_err(|_| actix_web::error::ErrorUnauthorized(""))?;
-
-    cache.insert(group_name, token_hash.to_owned(), group_id);
-    Ok(group_id)
+#[derive(Deserialize)]
+struct TokenQuery {
+    token: String,
 }
 
 impl<S, B> Service<ServiceRequest> for AuthenticateMiddleware<S>
@@ -224,7 +205,7 @@ where
 
         async move {
             let group_name = match req.match_info().get("group_name") {
-                Some(group_name) => group_name,
+                Some(group_name) => group_name.to_owned(),
                 None => {
                     return Ok(req.error_response(actix_web::error::ErrorBadRequest(
                         "Missing group name from request",
@@ -233,33 +214,41 @@ where
             };
 
             if group_name != "_" {
-                let auth_header = match req.headers().get("Authorization") {
-                    Some(auth_header) => auth_header,
-                    None => {
-                        return Ok(req.error_response(actix_web::error::ErrorBadRequest(
-                            "Authorization header missing from request",
-                        )));
-                    }
+                // Every route sends the token via the Authorization header
+                // except /live, whose browser-native EventSource connection
+                // can't set custom headers -- it sends the token as a query
+                // param instead, so that's checked as a fallback here.
+                let token = req
+                    .headers()
+                    .get("Authorization")
+                    .and_then(|h| h.to_str().ok())
+                    .map(|s| s.to_owned())
+                    .or_else(|| {
+                        web::Query::<TokenQuery>::from_query(req.query_string())
+                            .ok()
+                            .map(|q| q.into_inner().token)
+                    });
+
+                let Some(token) = token else {
+                    return Ok(req.error_response(actix_web::error::ErrorBadRequest(
+                        "Authorization header missing from request",
+                    )));
                 };
-                let token = match auth_header.to_str() {
-                    Ok(token) => token,
-                    Err(_) => {
-                        return Ok(req.error_response(actix_web::error::ErrorBadRequest(
-                            "Unable to parse Authorization header",
-                        )));
+
+                let db_pool = match req.app_data::<web::Data<Pool>>() {
+                    Some(pool) => pool.clone(),
+                    None => {
+                        return Ok(
+                            req.error_response(actix_web::error::ErrorInternalServerError(""))
+                        );
                     }
                 };
 
-                let token_hash = crate::crypto::token_hash(token, group_name);
-                let group_id = match cache.get(group_name, &token_hash) {
-                    Some(group_id) => group_id,
-                    None => match authenticate_via_db(&req, group_name, token, &token_hash, &cache)
-                        .await
-                    {
+                let group_id =
+                    match authenticate_token(&db_pool, &cache, &group_name, &token).await {
                         Ok(group_id) => group_id,
                         Err(e) => return Ok(req.error_response(e)),
-                    },
-                };
+                    };
 
                 let authentication_result = AuthenticationResult { group_id };
                 req.extensions_mut()

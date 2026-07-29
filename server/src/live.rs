@@ -1,4 +1,4 @@
-use crate::auth_middleware::{authenticate_token, AuthenticationCache};
+use crate::auth_middleware::Authenticated;
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{GroupMember, LivePush};
@@ -6,14 +6,8 @@ use actix_web::{get, web, Error, HttpResponse};
 use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use futures_util::stream::{self, StreamExt};
-use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-
-#[derive(Deserialize)]
-pub struct LiveQuery {
-    pub token: String,
-}
 
 fn format_sse_event(kind: &str, members: &[&GroupMember]) -> Option<web::Bytes> {
     if members.is_empty() {
@@ -43,19 +37,17 @@ fn event_for_push(push: &LivePush, group_id: i64) -> Option<web::Bytes> {
 /// activity instead of poll-interval x open-tab-count, which is what was
 /// driving Supabase egress far past the free tier.
 ///
-/// Registered outside the AuthenticateMiddleware-wrapped scope (see
-/// main.rs) since EventSource can't set an Authorization header -- the
-/// token comes in as a query param and is checked directly here instead.
-#[get("/api/group/{group_name}/live")]
+/// Auth works the same as every other route in authed_scope (see main.rs) --
+/// AuthenticateMiddleware falls back to a `token` query param when the
+/// Authorization header is absent, since EventSource can't set custom
+/// headers.
+#[get("/live")]
 pub async fn live(
-    path: web::Path<String>,
-    query: web::Query<LiveQuery>,
+    auth: Authenticated,
     db_pool: web::Data<Pool>,
-    auth_cache: web::Data<Arc<AuthenticationCache>>,
     live_tx: web::Data<broadcast::Sender<Arc<LivePush>>>,
 ) -> Result<HttpResponse, Error> {
-    let group_name = path.into_inner();
-    let group_id = authenticate_token(&db_pool, &auth_cache, &group_name, &query.token).await?;
+    let group_id = auth.group_id;
 
     let rx = live_tx.subscribe();
 
