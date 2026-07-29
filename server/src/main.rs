@@ -2,6 +2,7 @@ use server::auth_middleware::AuthenticateMiddlewareFactory;
 use server::authed;
 use server::config::Config;
 use server::db;
+use server::live;
 use server::models;
 use server::unauthed;
 use server::update_batcher;
@@ -9,7 +10,8 @@ use server::wom;
 
 use actix_cors::Cors;
 use actix_web::{http::header, middleware, web, App, HttpServer};
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc};
 use tokio_postgres_rustls::MakeRustlsConnect;
 
 use mimalloc::MiMalloc;
@@ -61,8 +63,10 @@ async fn main() -> std::io::Result<()> {
 
     let update_batcher_pool = config.pg.create_pool(None, tls_connector()).unwrap();
     let (tx, rx) = mpsc::channel::<models::GroupMember>(10000);
+    let (live_tx, _live_rx) = broadcast::channel::<Arc<models::LivePush>>(1024);
+    let update_batcher_live_tx = live_tx.clone();
     tokio::spawn(async move {
-        update_batcher::background_worker(update_batcher_pool, rx, None).await;
+        update_batcher::background_worker(update_batcher_pool, rx, None, update_batcher_live_tx).await;
     });
     let auth_cache = std::sync::Arc::new(server::auth_middleware::AuthenticationCache::new());
 
@@ -132,8 +136,11 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(tx.clone()))
+            .app_data(web::Data::new(live_tx.clone()))
+            .app_data(web::Data::new(auth_cache.clone()))
             .service(authed_scope)
             .service(unauthed_scope)
+            .service(live::live)
     })
     .bind(("0.0.0.0", 8080))?
     .run()

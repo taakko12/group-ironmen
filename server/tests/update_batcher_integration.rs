@@ -142,9 +142,10 @@ fn spawn_worker(
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel::<GroupMember>(10000);
     let (notify_tx, notify_rx) = tokio::sync::mpsc::channel::<()>(16);
+    let (live_tx, _live_rx) = tokio::sync::broadcast::channel(1024);
     let worker_pool = pool.clone();
     tokio::spawn(async move {
-        update_batcher::background_worker(worker_pool, rx, Some(notify_tx)).await;
+        update_batcher::background_worker(worker_pool, rx, Some(notify_tx), live_tx).await;
     });
     (tx, notify_rx)
 }

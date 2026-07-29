@@ -166,4 +166,38 @@ describe("group-data", () => {
       expect(data.groupItems[244]).toBeUndefined();
     });
   });
+
+  describe("updatePartial", () => {
+    it("does not remove members absent from the delta", () => {
+      const data = new GroupData();
+      data.update([{ name: "Alice" }, { name: "Bob" }]);
+
+      data.updatePartial([{ name: "Alice", stats: [50, 99, 25, 70, 3500, 0, 328] }]);
+
+      expect(data.members.has("Alice")).toBe(true);
+      expect(data.members.has("Bob")).toBe(true);
+    });
+
+    it("still applies field updates for members included in the delta", () => {
+      const data = new GroupData();
+      data.update([{ name: "Alice" }]);
+
+      data.updatePartial([{ name: "Alice", stats: [50, 99, 25, 70, 3500, 0, 328] }]);
+
+      expect(data.members.get("Alice").stats.hitpoints).toEqual({ current: 50, max: 99 });
+    });
+
+    it("does not drop existing group items for members the delta didn't mention", () => {
+      const data = new GroupData();
+      data.update([
+        { name: "Alice", inventory: [4151, 1] },
+        { name: "Bob", inventory: [4151, 1] },
+      ]);
+      expect(data.groupItems[4151].quantity).toBe(2);
+
+      data.updatePartial([{ name: "Alice", stats: [50, 99, 25, 70, 3500, 0, 328] }]);
+
+      expect(data.groupItems[4151].quantity).toBe(2);
+    });
+  });
 });

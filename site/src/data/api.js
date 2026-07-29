@@ -9,14 +9,12 @@ class Api {
     this.createGroupUrl = `${this.baseUrl}/create-group`;
     this.exampleDataEnabled = false;
     this.enabled = false;
-    // bank/potion storage are only ever rendered by the /items page (the
-    // combined group items view) -- everywhere else only needs the cheap
-    // per-member fields, so skip fetching those two on every 5s poll unless
-    // that page is actually open.
-    this.heavyDataEnabled = false;
-    pubsub.subscribe("route-activated", (route) => {
-      this.heavyDataEnabled = route.getAttribute("route-component") === "items-page";
-    });
+  }
+
+  get liveUrl() {
+    // EventSource can't set custom headers, so the token travels as a query
+    // param here instead of the Authorization header every other endpoint uses.
+    return `${this.baseUrl}/group/${this.groupName}/live?token=${encodeURIComponent(this.groupToken)}`;
   }
 
   get getGroupDataUrl() {
@@ -116,21 +114,38 @@ class Api {
 
   async enable(groupName, groupToken) {
     await this.disable();
-    this.nextCheck = new Date(0).toISOString();
-    this.heavyNextCheck = new Date(0).toISOString();
     this.setCredentials(groupName, groupToken);
 
     if (!this.enabled) {
       this.enabled = true;
-      // getGroupInterval is a Promise so we can make sure this method does not leak
-      // any intervals with multiple calls to .enable(). This could be possible because of
-      // the wait for the item and quest data loads before we create the interval.
-      this.getGroupInterval = pubsub.waitForAllEvents("item-data-loaded", "quest-data-loaded").then(() => {
-        return utility.callOnInterval(this.getGroupData.bind(this), 5000);
-      });
+      if (this.exampleDataEnabled) {
+        // getGroupInterval is a Promise so we can make sure this method does not leak
+        // any intervals with multiple calls to .enable(). This could be possible because of
+        // the wait for the item and quest data loads before we create the interval.
+        this.getGroupInterval = pubsub.waitForAllEvents("item-data-loaded", "quest-data-loaded").then(() => {
+          return utility.callOnInterval(this.getGroupData.bind(this), 5000);
+        });
+        await this.getGroupInterval;
+      } else {
+        await pubsub.waitForAllEvents("item-data-loaded", "quest-data-loaded");
+        // The real backend now pushes updates over /live instead of being
+        // polled every few seconds (see connectLive()), so there's no
+        // recurring request left to catch a bad/revoked token on. Check
+        // once up front instead -- a token that goes bad *after* this,
+        // while still connected, won't be caught; EventSource will just
+        // keep quietly retrying the connection rather than redirecting to
+        // login. Accepted gap: catching that too would mean bringing back
+        // a periodic request, which is exactly what this change removes.
+        const loggedIn = await this.amILoggedIn();
+        if (!loggedIn.ok) {
+          await this.disable();
+          window.history.pushState("", "", "/login");
+          pubsub.publish("get-group-data");
+          return;
+        }
+        this.connectLive();
+      }
     }
-
-    await this.getGroupInterval;
   }
 
   async disable() {
@@ -140,43 +155,45 @@ class Api {
     groupData.members = new Map();
     groupData.groupItems = {};
     groupData.filters = [""];
+    if (this.liveSource) {
+      this.liveSource.close();
+      this.liveSource = undefined;
+    }
     if (this.getGroupInterval) {
       window.clearInterval(await this.getGroupInterval);
     }
   }
 
-  async getGroupData() {
-    const nextCheck = this.nextCheck;
-    const includeHeavy = this.heavyDataEnabled;
+  connectLive() {
+    const source = new EventSource(this.liveUrl);
+    this.liveSource = source;
+    source.addEventListener("message", (event) => this.handleLiveMessage(event.data));
+  }
 
-    if (this.exampleDataEnabled) {
-      const newGroupData = exampleData.getGroupData();
-      groupData.update(newGroupData);
-      pubsub.publish("get-group-data", groupData);
-    } else {
-      const params = `from_time=${nextCheck}&include_heavy=${includeHeavy}&heavy_from_time=${this.heavyNextCheck}`;
-      const response = await fetch(`${this.getGroupDataUrl}?${params}`, {
-        headers: {
-          Authorization: this.groupToken,
-        },
-      });
-      if (!response.ok) {
-        if (response.status === 401) {
-          await this.disable();
-          window.history.pushState("", "", "/login");
-          pubsub.publish("get-group-data");
-        }
-        return;
-      }
-
-      const newGroupData = await response.json();
-      const lastUpdated = groupData.update(newGroupData).toISOString();
-      this.nextCheck = lastUpdated;
-      if (includeHeavy) {
-        this.heavyNextCheck = lastUpdated;
-      }
-      pubsub.publish("get-group-data", groupData);
+  handleLiveMessage(data) {
+    let payload;
+    try {
+      payload = JSON.parse(data);
+    } catch {
+      return;
     }
+
+    if (payload.kind === "full") {
+      groupData.update(payload.members);
+    } else if (payload.kind === "delta") {
+      groupData.updatePartial(payload.members);
+    } else {
+      return;
+    }
+    pubsub.publish("get-group-data", groupData);
+  }
+
+  async getGroupData() {
+    // Only reachable in demo mode -- the real backend pushes updates over
+    // /live (see connectLive()) instead of being polled.
+    const newGroupData = exampleData.getGroupData();
+    groupData.update(newGroupData);
+    pubsub.publish("get-group-data", groupData);
   }
 
   async createGroup(groupName, memberNames, captchaResponse) {

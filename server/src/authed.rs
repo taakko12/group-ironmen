@@ -3,8 +3,8 @@ use crate::db;
 use crate::error::ApiError;
 use crate::models::{
     AddGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData, GroupGoals,
-    GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, MustBankItem, NameChange,
-    NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPings,
+    GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, LivePush, MustBankItem,
+    NameChange, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPings,
     RenameGroupMember, RequestBank, RequestBankBatch, SetBankPingsEnabled, SetGoalDone,
     SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls, WomPlayerGains,
     SHARED_MEMBER,
@@ -16,13 +16,29 @@ use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Pool};
 use serde::Deserialize;
 use std::collections::HashMap;
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc};
+
+/// Best-effort push of a fresh full roster to any connected /live subscribers
+/// after an add/delete/rename -- those are rare admin actions, not something
+/// that needs to be fast, so a failure here just means subscribers pick up
+/// the change on their next reconnect instead of immediately.
+async fn broadcast_full_snapshot(db_pool: &Pool, live_tx: &broadcast::Sender<Arc<LivePush>>, group_id: i64) {
+    let Ok(client) = db_pool.get().await else {
+        return;
+    };
+    let epoch = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
+    if let Ok(members) = db::get_group_data(&client, group_id, &epoch, Some(&epoch)).await {
+        let _ = live_tx.send(Arc::new(LivePush::Full(members)));
+    }
+}
 
 #[post("/add-group-member")]
 pub async fn add_group_member(
     auth: Authenticated,
     group_member: web::Json<GroupMember>,
     db_pool: web::Data<Pool>,
+    live_tx: web::Data<broadcast::Sender<Arc<LivePush>>>,
 ) -> Result<HttpResponse, Error> {
     if group_member.name.eq(SHARED_MEMBER) {
         return Ok(
@@ -37,6 +53,7 @@ pub async fn add_group_member(
 
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     db::add_group_member(&client, auth.group_id, &group_member.name).await?;
+    broadcast_full_snapshot(&db_pool, &live_tx, auth.group_id).await;
     Ok(HttpResponse::Created().finish())
 }
 
@@ -45,6 +62,7 @@ pub async fn delete_group_member(
     auth: Authenticated,
     group_member: web::Json<GroupMember>,
     db_pool: web::Data<Pool>,
+    live_tx: web::Data<broadcast::Sender<Arc<LivePush>>>,
 ) -> Result<HttpResponse, Error> {
     if group_member.name.eq(SHARED_MEMBER) {
         return Ok(
@@ -54,6 +72,7 @@ pub async fn delete_group_member(
 
     let mut client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     db::delete_group_member(&mut client, auth.group_id, &group_member.name).await?;
+    broadcast_full_snapshot(&db_pool, &live_tx, auth.group_id).await;
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -62,6 +81,7 @@ pub async fn rename_group_member(
     auth: Authenticated,
     rename_member: web::Json<RenameGroupMember>,
     db_pool: web::Data<Pool>,
+    live_tx: web::Data<broadcast::Sender<Arc<LivePush>>>,
 ) -> Result<HttpResponse, Error> {
     if rename_member.original_name.eq(SHARED_MEMBER) || rename_member.new_name.eq(SHARED_MEMBER) {
         return Ok(
@@ -84,6 +104,7 @@ pub async fn rename_group_member(
         &rename_member.new_name,
     )
     .await?;
+    broadcast_full_snapshot(&db_pool, &live_tx, auth.group_id).await;
     Ok(HttpResponse::Ok().finish())
 }
 

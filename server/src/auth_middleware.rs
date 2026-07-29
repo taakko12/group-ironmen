@@ -146,6 +146,33 @@ impl FromRequest for Authenticated {
         ready(result)
     }
 }
+/// Authenticate a group token supplied outside the normal Authorization
+/// header. The browser's EventSource API can't set custom request headers,
+/// so /live (see live.rs) takes the token as a query param instead and uses
+/// this directly, bypassing AuthenticateMiddleware entirely.
+pub async fn authenticate_token(
+    db_pool: &Pool,
+    cache: &Arc<AuthenticationCache>,
+    group_name: &str,
+    token: &str,
+) -> Result<i64, actix_web::Error> {
+    let token_hash = crate::crypto::token_hash(token, group_name);
+    if let Some(group_id) = cache.get(group_name, &token_hash) {
+        return Ok(group_id);
+    }
+
+    let client = db_pool
+        .get()
+        .await
+        .map_err(|_| actix_web::error::ErrorInternalServerError(""))?;
+    let group_id = db::get_group(&client, group_name, token)
+        .await
+        .map_err(|_| actix_web::error::ErrorUnauthorized(""))?;
+
+    cache.insert(group_name, token_hash, group_id);
+    Ok(group_id)
+}
+
 pub struct AuthenticateMiddleware<S> {
     service: Rc<S>,
     cache: Arc<AuthenticationCache>,

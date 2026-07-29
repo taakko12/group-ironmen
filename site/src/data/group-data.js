@@ -17,10 +17,15 @@ export class GroupData {
     this.mustBankFilter = false;
   }
 
-  update(groupData) {
+  // isPartialUpdate covers the /live delta pushes: those only carry the
+  // specific member(s) a batch just wrote, not the whole group, so members
+  // absent from `groupData` here are simply unchanged, not removed --
+  // unlike a full snapshot (initial /live connect, or a full poll), where
+  // an absent member really did leave the group.
+  update(groupData, isPartialUpdate = false) {
     this.transformFromStorage(groupData);
     groupData.sort((a, b) => a.name.localeCompare(b.name));
-    const removedMembers = new Set(this.members.keys());
+    const removedMembers = isPartialUpdate ? new Set() : new Set(this.members.keys());
 
     let updatedAttributes = new Set();
     let lastUpdated = new Date(0);
@@ -128,6 +133,10 @@ export class GroupData {
     }
 
     return new Date(lastUpdated.getTime() + 1);
+  }
+
+  updatePartial(groupData) {
+    return this.update(groupData, true);
   }
 
   convertFilterToFilterList(filter) {

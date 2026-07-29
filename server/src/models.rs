@@ -32,7 +32,7 @@ pub struct RenameGroupMember {
     pub new_name: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct GroupMember {
     #[serde(skip)]
     pub group_id: Option<i64>,
@@ -74,6 +74,18 @@ pub struct GroupMember {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
 }
+
+/// Pushed to connected /live subscribers instead of them polling get-group-data.
+/// `Full` carries every current member of one group (sent on connect, and
+/// after roster changes like add/remove/rename); `Delta` carries whatever
+/// partial per-member fields a batch just wrote to Postgres and may span
+/// multiple groups at once (the batcher is shared across all groups), so
+/// each subscriber filters by its own group_id before forwarding either kind.
+pub enum LivePush {
+    Full(Vec<GroupMember>),
+    Delta(Vec<GroupMember>),
+}
+
 #[derive(Serialize)]
 pub struct AggregateSkillData {
     pub time: DateTime<Utc>,

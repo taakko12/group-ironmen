@@ -1,12 +1,12 @@
 use crate::db::serialize_serde;
 use crate::error::ApiError;
-use crate::models::{GroupMember, SHARED_MEMBER};
+use crate::models::{GroupMember, LivePush, SHARED_MEMBER};
 use chrono::{DateTime, Utc};
 use deadpool_postgres::{Client, Pool};
 use futures_util::stream::{self, StreamExt};
 use std::collections::HashMap;
-use std::sync::OnceLock;
-use tokio::sync::mpsc;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{broadcast, mpsc};
 use tokio::time::{self, Duration, Instant};
 
 static BATCH_SIZE: usize = 5000;
@@ -21,6 +21,7 @@ pub async fn background_worker(
     pool: Pool,
     mut rx: mpsc::Receiver<GroupMember>,
     notify: Option<mpsc::Sender<()>>,
+    live_tx: broadcast::Sender<Arc<LivePush>>,
 ) {
     let batch_timeout = Duration::from_millis(50);
 
@@ -77,6 +78,11 @@ pub async fn background_worker(
 
         let mut filtered_buffer = deduplicate_batch(buffer);
 
+        // Snapshot of what's about to be written, for /live subscribers.
+        // Broadcast after the writes below actually commit, so a client
+        // never sees a push for data that isn't durable yet.
+        let live_batch = filtered_buffer.clone();
+
         // Process the batch in chunks with bounded concurrency aligned to the
         // pool's usable connection count. Reserve one slot so the batcher
         // cannot saturate its own pool, leaving headroom for maintenance
@@ -117,6 +123,11 @@ pub async fn background_worker(
                     e,
                 );
             }
+        }
+
+        if !live_batch.is_empty() {
+            // No receivers currently connected is a normal, harmless case.
+            let _ = live_tx.send(Arc::new(LivePush::Delta(live_batch)));
         }
 
         if let Some(ref notify_tx) = notify {

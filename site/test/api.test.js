@@ -1,9 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../src/data/api";
 import { pubsub } from "../src/data/pubsub";
-import { utility } from "../src/utility";
 import { groupData } from "../src/data/group-data";
 import { exampleData } from "../src/data/example-data";
+
+// jsdom doesn't implement EventSource, so /live needs a stand-in. Tests
+// trigger server pushes via `instance.emit("message", jsonString)`.
+class FakeEventSource {
+  constructor(url) {
+    this.url = url;
+    this.listeners = {};
+    FakeEventSource.instances.push(this);
+  }
+  addEventListener(type, handler) {
+    (this.listeners[type] ??= []).push(handler);
+  }
+  emit(type, data) {
+    for (const handler of this.listeners[type] || []) {
+      handler({ data });
+    }
+  }
+  close() {
+    this.closed = true;
+  }
+}
 
 describe("api", () => {
   beforeEach(() => {
@@ -12,13 +32,15 @@ describe("api", () => {
     api.groupName = undefined;
     api.groupToken = undefined;
     api.getGroupInterval = undefined;
-    api.nextCheck = undefined;
+    api.liveSource = undefined;
 
     groupData.members = new Map();
     groupData.groupItems = {};
     groupData.filters = ["existing"];
 
     globalThis.fetch = vi.fn();
+    FakeEventSource.instances = [];
+    globalThis.EventSource = FakeEventSource;
   });
 
   it("sets credentials and exposes group-scoped urls", () => {
@@ -34,32 +56,51 @@ describe("api", () => {
     expect(api.skillDataUrl).toContain("/group/iron-team/get-skill-data");
   });
 
-  it("enable waits for data-load events and starts polling once", async () => {
+  it("enable waits for data-load events, checks auth once, then connects live", async () => {
     const waitForAllEventsSpy = vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
-    const callOnIntervalSpy = vi.spyOn(utility, "callOnInterval").mockReturnValue(37);
+    globalThis.fetch.mockResolvedValue({ ok: true });
 
     await api.enable("gim", "token");
 
     expect(waitForAllEventsSpy).toHaveBeenCalledWith("item-data-loaded", "quest-data-loaded");
-    expect(callOnIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5000);
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/group/gim/am-i-logged-in", {
+      headers: { Authorization: "token" },
+    });
     expect(api.enabled).toBe(true);
     expect(api.groupName).toBe("gim");
     expect(api.groupToken).toBe("token");
-    expect(api.nextCheck).toBe(new Date(0).toISOString());
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(FakeEventSource.instances[0].url).toBe("/api/group/gim/live?token=token");
+    expect(api.liveSource).toBe(FakeEventSource.instances[0]);
   });
 
-  it("disable clears credentials, group caches, and polling interval", async () => {
-    const clearIntervalSpy = vi.spyOn(window, "clearInterval");
-    api.groupName = "gim";
-    api.groupToken = "token";
-    api.enabled = true;
-    api.getGroupInterval = Promise.resolve(99);
+  it("enable redirects to login instead of connecting live when the auth check fails", async () => {
+    vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
+    const pushStateSpy = vi.spyOn(window.history, "pushState");
+    const publishSpy = vi.spyOn(pubsub, "publish");
+    globalThis.fetch.mockResolvedValue({ ok: false, status: 401 });
+
+    await api.enable("gim", "token");
+
+    expect(FakeEventSource.instances).toHaveLength(0);
+    expect(pushStateSpy).toHaveBeenCalledWith("", "", "/login");
+    expect(publishSpy).toHaveBeenCalledWith("get-group-data");
+    expect(api.enabled).toBe(false);
+    expect(api.groupName).toBeUndefined();
+  });
+
+  it("disable closes the live connection, clears credentials, and clears group caches", async () => {
+    vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
+    globalThis.fetch.mockResolvedValue({ ok: true });
+    await api.enable("gim", "token");
+    const source = FakeEventSource.instances[0];
     groupData.members = new Map([["Alice", {}]]);
     groupData.groupItems = { 4151: { id: 4151, quantity: 1 } };
 
     await api.disable();
 
-    expect(clearIntervalSpy).toHaveBeenCalledWith(99);
+    expect(source.closed).toBe(true);
+    expect(api.liveSource).toBeUndefined();
     expect(api.enabled).toBe(false);
     expect(api.groupName).toBeUndefined();
     expect(api.groupToken).toBeUndefined();
@@ -68,78 +109,59 @@ describe("api", () => {
     expect(groupData.filters).toEqual([""]);
   });
 
-  it("getGroupData publishes updated group data after successful fetch", async () => {
-    api.setCredentials("gim", "token");
-    api.nextCheck = "2026-03-30T00:00:00.000Z";
-    api.heavyNextCheck = "1970-01-01T00:00:00.000Z";
-    api.heavyDataEnabled = false;
+  it("disable clears the demo-mode polling interval", async () => {
+    const clearIntervalSpy = vi.spyOn(window, "clearInterval");
+    api.groupName = "gim";
+    api.groupToken = "token";
+    api.enabled = true;
+    api.getGroupInterval = Promise.resolve(99);
+
+    await api.disable();
+
+    expect(clearIntervalSpy).toHaveBeenCalledWith(99);
+  });
+
+  it("handleLiveMessage applies a full snapshot via groupData.update", async () => {
+    vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
+    globalThis.fetch.mockResolvedValue({ ok: true });
+    await api.enable("gim", "token");
 
     const payload = [{ name: "Alice" }];
-    const responseJson = vi.fn().mockResolvedValue(payload);
-    globalThis.fetch.mockResolvedValue({ ok: true, json: responseJson });
-
     const updateSpy = vi.spyOn(groupData, "update").mockReturnValue(new Date("2026-03-30T00:00:05.000Z"));
     const publishSpy = vi.spyOn(pubsub, "publish");
 
-    await api.getGroupData();
+    FakeEventSource.instances[0].emit("message", JSON.stringify({ kind: "full", members: payload }));
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      "/api/group/gim/get-group-data?from_time=2026-03-30T00:00:00.000Z&include_heavy=false&heavy_from_time=1970-01-01T00:00:00.000Z",
-      {
-        headers: { Authorization: "token" },
-      },
-    );
     expect(updateSpy).toHaveBeenCalledWith(payload);
-    expect(api.nextCheck).toBe("2026-03-30T00:00:05.000Z");
-    expect(api.heavyNextCheck).toBe("1970-01-01T00:00:00.000Z");
     expect(publishSpy).toHaveBeenCalledWith("get-group-data", groupData);
   });
 
-  it("getGroupData also advances heavyNextCheck when the items page requested heavy fields", async () => {
-    api.setCredentials("gim", "token");
-    api.nextCheck = "2026-03-30T00:00:00.000Z";
-    api.heavyNextCheck = "1970-01-01T00:00:00.000Z";
-    api.heavyDataEnabled = true;
+  it("handleLiveMessage applies a delta via groupData.updatePartial", async () => {
+    vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
+    globalThis.fetch.mockResolvedValue({ ok: true });
+    await api.enable("gim", "token");
 
-    const payload = [{ name: "Alice" }];
-    globalThis.fetch.mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(payload) });
-    vi.spyOn(groupData, "update").mockReturnValue(new Date("2026-03-30T00:00:05.000Z"));
+    const payload = [{ name: "Alice", stats: [1, 2, 3] }];
+    const updatePartialSpy = vi.spyOn(groupData, "updatePartial").mockReturnValue(new Date());
 
-    await api.getGroupData();
+    FakeEventSource.instances[0].emit("message", JSON.stringify({ kind: "delta", members: payload }));
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      "/api/group/gim/get-group-data?from_time=2026-03-30T00:00:00.000Z&include_heavy=true&heavy_from_time=1970-01-01T00:00:00.000Z",
-      {
-        headers: { Authorization: "token" },
-      },
-    );
-    expect(api.heavyNextCheck).toBe("2026-03-30T00:00:05.000Z");
+    expect(updatePartialSpy).toHaveBeenCalledWith(payload);
   });
 
-  it("getGroupData handles unauthorized responses by disabling and redirecting", async () => {
-    const disableSpy = vi.spyOn(api, "disable").mockResolvedValue();
-    const pushStateSpy = vi.spyOn(window.history, "pushState");
-    const publishSpy = vi.spyOn(pubsub, "publish");
+  it("handleLiveMessage ignores unparsable or unknown-kind messages", async () => {
+    vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
+    globalThis.fetch.mockResolvedValue({ ok: true });
+    await api.enable("gim", "token");
 
-    globalThis.fetch.mockResolvedValue({ ok: false, status: 401 });
+    const updateSpy = vi.spyOn(groupData, "update");
+    const updatePartialSpy = vi.spyOn(groupData, "updatePartial");
 
-    await api.getGroupData();
+    FakeEventSource.instances[0].emit("message", "not json");
+    FakeEventSource.instances[0].emit("message", JSON.stringify({ kind: "unknown", members: [] }));
 
-    expect(disableSpy).toHaveBeenCalled();
-    expect(pushStateSpy).toHaveBeenCalledWith("", "", "/login");
-    expect(publishSpy).toHaveBeenCalledWith("get-group-data");
-  });
-
-  it("getGroupData ignores non-401 fetch errors", async () => {
-    const disableSpy = vi.spyOn(api, "disable");
-    const publishSpy = vi.spyOn(pubsub, "publish");
-
-    globalThis.fetch.mockResolvedValue({ ok: false, status: 500 });
-
-    await api.getGroupData();
-
-    expect(disableSpy).not.toHaveBeenCalled();
-    expect(publishSpy).not.toHaveBeenCalled();
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(updatePartialSpy).not.toHaveBeenCalled();
   });
 
   it("uses example data path for group and skill data when enabled", async () => {
