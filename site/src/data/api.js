@@ -9,6 +9,14 @@ class Api {
     this.createGroupUrl = `${this.baseUrl}/create-group`;
     this.exampleDataEnabled = false;
     this.enabled = false;
+    // bank/potion storage are only ever rendered by the /items page (the
+    // combined group items view) -- everywhere else only needs the cheap
+    // per-member fields, so skip fetching those two on every 5s poll unless
+    // that page is actually open.
+    this.heavyDataEnabled = false;
+    pubsub.subscribe("route-activated", (route) => {
+      this.heavyDataEnabled = route.getAttribute("route-component") === "items-page";
+    });
   }
 
   get getGroupDataUrl() {
@@ -109,6 +117,7 @@ class Api {
   async enable(groupName, groupToken) {
     await this.disable();
     this.nextCheck = new Date(0).toISOString();
+    this.heavyNextCheck = new Date(0).toISOString();
     this.setCredentials(groupName, groupToken);
 
     if (!this.enabled) {
@@ -117,7 +126,7 @@ class Api {
       // any intervals with multiple calls to .enable(). This could be possible because of
       // the wait for the item and quest data loads before we create the interval.
       this.getGroupInterval = pubsub.waitForAllEvents("item-data-loaded", "quest-data-loaded").then(() => {
-        return utility.callOnInterval(this.getGroupData.bind(this), 1000);
+        return utility.callOnInterval(this.getGroupData.bind(this), 5000);
       });
     }
 
@@ -138,13 +147,15 @@ class Api {
 
   async getGroupData() {
     const nextCheck = this.nextCheck;
+    const includeHeavy = this.heavyDataEnabled;
 
     if (this.exampleDataEnabled) {
       const newGroupData = exampleData.getGroupData();
       groupData.update(newGroupData);
       pubsub.publish("get-group-data", groupData);
     } else {
-      const response = await fetch(`${this.getGroupDataUrl}?from_time=${nextCheck}`, {
+      const params = `from_time=${nextCheck}&include_heavy=${includeHeavy}&heavy_from_time=${this.heavyNextCheck}`;
+      const response = await fetch(`${this.getGroupDataUrl}?${params}`, {
         headers: {
           Authorization: this.groupToken,
         },
@@ -159,7 +170,11 @@ class Api {
       }
 
       const newGroupData = await response.json();
-      this.nextCheck = groupData.update(newGroupData).toISOString();
+      const lastUpdated = groupData.update(newGroupData).toISOString();
+      this.nextCheck = lastUpdated;
+      if (includeHeavy) {
+        this.heavyNextCheck = lastUpdated;
+      }
       pubsub.publish("get-group-data", groupData);
     }
   }

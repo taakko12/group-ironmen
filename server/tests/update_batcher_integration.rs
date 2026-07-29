@@ -124,7 +124,7 @@ fn make_member(group_id: Option<i64>, name: &str) -> GroupMember {
 /// Uses epoch as the cutoff timestamp so all fields with non-null timestamps are included.
 async fn get_member_from_db(client: &Object, group_id: i64, name: &str) -> GroupMember {
     let epoch = chrono::DateTime::from_timestamp(0, 0).unwrap();
-    let members = db::get_group_data(client, group_id, &epoch)
+    let members = db::get_group_data(client, group_id, &epoch, Some(&epoch))
         .await
         .expect("failed to get group data");
     members
@@ -935,7 +935,7 @@ async fn test_non_member_update_is_silent_noop() {
     // "ghost" should not exist in the database — the UPDATE WHERE clause
     // silently matched no rows
     let epoch = chrono::DateTime::from_timestamp(0, 0).unwrap();
-    let members = db::get_group_data(&client, group_id, &epoch)
+    let members = db::get_group_data(&client, group_id, &epoch, Some(&epoch))
         .await
         .expect("failed to get group data");
     assert!(
@@ -1061,7 +1061,7 @@ async fn test_potion_storage_incremental_reads() {
 
     // Cutoff after the update — potion_storage should be omitted
     let after_ts = ts_after + chrono::Duration::seconds(10);
-    let members_after_cutoff = db::get_group_data(&client, group_id, &after_ts)
+    let members_after_cutoff = db::get_group_data(&client, group_id, &after_ts, Some(&after_ts))
         .await
         .expect("failed to get group data");
     let alice_after_cutoff = members_after_cutoff
@@ -1074,7 +1074,7 @@ async fn test_potion_storage_incremental_reads() {
     );
 
     // Cutoff at the update timestamp — potion_storage should be present
-    let members_at = db::get_group_data(&client, group_id, &ts_after)
+    let members_at = db::get_group_data(&client, group_id, &ts_after, Some(&ts_after))
         .await
         .expect("failed to get group data");
     let alice_at = members_at

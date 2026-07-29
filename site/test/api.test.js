@@ -41,7 +41,7 @@ describe("api", () => {
     await api.enable("gim", "token");
 
     expect(waitForAllEventsSpy).toHaveBeenCalledWith("item-data-loaded", "quest-data-loaded");
-    expect(callOnIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+    expect(callOnIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5000);
     expect(api.enabled).toBe(true);
     expect(api.groupName).toBe("gim");
     expect(api.groupToken).toBe("token");
@@ -71,6 +71,8 @@ describe("api", () => {
   it("getGroupData publishes updated group data after successful fetch", async () => {
     api.setCredentials("gim", "token");
     api.nextCheck = "2026-03-30T00:00:00.000Z";
+    api.heavyNextCheck = "1970-01-01T00:00:00.000Z";
+    api.heavyDataEnabled = false;
 
     const payload = [{ name: "Alice" }];
     const responseJson = vi.fn().mockResolvedValue(payload);
@@ -82,14 +84,36 @@ describe("api", () => {
     await api.getGroupData();
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      "/api/group/gim/get-group-data?from_time=2026-03-30T00:00:00.000Z",
+      "/api/group/gim/get-group-data?from_time=2026-03-30T00:00:00.000Z&include_heavy=false&heavy_from_time=1970-01-01T00:00:00.000Z",
       {
         headers: { Authorization: "token" },
       },
     );
     expect(updateSpy).toHaveBeenCalledWith(payload);
     expect(api.nextCheck).toBe("2026-03-30T00:00:05.000Z");
+    expect(api.heavyNextCheck).toBe("1970-01-01T00:00:00.000Z");
     expect(publishSpy).toHaveBeenCalledWith("get-group-data", groupData);
+  });
+
+  it("getGroupData also advances heavyNextCheck when the items page requested heavy fields", async () => {
+    api.setCredentials("gim", "token");
+    api.nextCheck = "2026-03-30T00:00:00.000Z";
+    api.heavyNextCheck = "1970-01-01T00:00:00.000Z";
+    api.heavyDataEnabled = true;
+
+    const payload = [{ name: "Alice" }];
+    globalThis.fetch.mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(payload) });
+    vi.spyOn(groupData, "update").mockReturnValue(new Date("2026-03-30T00:00:05.000Z"));
+
+    await api.getGroupData();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/group/gim/get-group-data?from_time=2026-03-30T00:00:00.000Z&include_heavy=true&heavy_from_time=1970-01-01T00:00:00.000Z",
+      {
+        headers: { Authorization: "token" },
+      },
+    );
+    expect(api.heavyNextCheck).toBe("2026-03-30T00:00:05.000Z");
   });
 
   it("getGroupData handles unauthorized responses by disabling and redirecting", async () => {

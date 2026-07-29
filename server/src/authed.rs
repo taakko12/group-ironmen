@@ -201,10 +201,26 @@ pub async fn update_group_member(
     }
 }
 
+fn default_include_heavy() -> bool {
+    true
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GetGroupDataQuery {
     pub from_time: DateTime<Utc>,
+    // bank/potion_storage are large, unbounded blobs only rendered by the
+    // group items page -- callers that don't care about them (or don't know
+    // about this param, e.g. the bot's backendClient) can skip fetching them
+    // entirely by passing include_heavy=false. Defaults to true so existing
+    // callers keep getting everything, unchanged.
+    #[serde(default = "default_include_heavy")]
+    pub include_heavy: bool,
+    // Independent cursor for the heavy fields, so a client that just flipped
+    // include_heavy on (e.g. opened the items page) can request the full
+    // current bank/potion_storage rather than only what changed since its
+    // (much more frequently advancing) light `from_time` cursor.
+    pub heavy_from_time: Option<DateTime<Utc>>,
 }
 #[get("/get-group-data")]
 pub async fn get_group_data(
@@ -213,8 +229,12 @@ pub async fn get_group_data(
     query: web::Query<GetGroupDataQuery>,
 ) -> Result<web::Json<Vec<GroupMember>>, Error> {
     let from_time = query.from_time;
+    let heavy_cutoff = query
+        .include_heavy
+        .then(|| query.heavy_from_time.unwrap_or(from_time));
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    let group_members = db::get_group_data(&client, auth.group_id, &from_time).await?;
+    let group_members =
+        db::get_group_data(&client, auth.group_id, &from_time, heavy_cutoff.as_ref()).await?;
     Ok(web::Json(group_members))
 }
 

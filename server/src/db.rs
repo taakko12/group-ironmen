@@ -311,10 +311,18 @@ pub async fn get_group_data(
     client: &Client,
     group_id: i64,
     timestamp: &DateTime<Utc>,
+    heavy_timestamp: Option<&DateTime<Utc>>,
 ) -> Result<Vec<GroupMember>, ApiError> {
-    let stmt = client
-        .prepare_cached(
-            r#"
+    // bank/potion_storage are the only unbounded/large columns here (an
+    // ironman's bank has no size cap) and are only ever rendered by the
+    // group items page, so they're gated behind their own cutoff and left
+    // out of the query entirely (not just NULLed) when not requested --
+    // that's what actually saves the Postgres->backend egress, since a NULL
+    // CASE result still requires reading the column's value to evaluate it.
+    let rows = if let Some(heavy_timestamp) = heavy_timestamp {
+        let stmt = client
+            .prepare_cached(
+                r#"
 SELECT member_name, discord_id, color,
 GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
 quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
@@ -326,22 +334,53 @@ CASE WHEN skills_last_update >= $1::TIMESTAMPTZ THEN skills ELSE NULL END as ski
 CASE WHEN quests_last_update >= $1::TIMESTAMPTZ THEN quests ELSE NULL END as quests,
 CASE WHEN inventory_last_update >= $1::TIMESTAMPTZ THEN inventory ELSE NULL END as inventory,
 CASE WHEN equipment_last_update >= $1::TIMESTAMPTZ THEN equipment ELSE NULL END as equipment,
-CASE WHEN bank_last_update >= $1::TIMESTAMPTZ THEN bank ELSE NULL END as bank,
+CASE WHEN bank_last_update >= $3::TIMESTAMPTZ THEN bank ELSE NULL END as bank,
 CASE WHEN rune_pouch_last_update >= $1::TIMESTAMPTZ THEN rune_pouch ELSE NULL END as rune_pouch,
 CASE WHEN interacting_last_update >= $1::TIMESTAMPTZ THEN interacting ELSE NULL END as interacting,
 CASE WHEN seed_vault_last_update >= $1::TIMESTAMPTZ THEN seed_vault ELSE NULL END as seed_vault,
 CASE WHEN diary_vars_last_update >= $1::TIMESTAMPTZ THEN diary_vars ELSE NULL END as diary_vars,
 CASE WHEN collection_log_last_update >= $1::TIMESTAMPTZ THEN collection_log ELSE NULL END as collection_log,
-CASE WHEN potion_storage_last_update >= $1::TIMESTAMPTZ THEN potion_storage ELSE NULL END as potion_storage
+CASE WHEN potion_storage_last_update >= $3::TIMESTAMPTZ THEN potion_storage ELSE NULL END as potion_storage
 FROM groupironman.members WHERE group_id=$2
 "#,
-        )
-        .await?;
+            )
+            .await?;
 
-    let rows = client
-        .query(&stmt, &[&timestamp, &group_id])
-        .await
-        .map_err(ApiError::GetGroupDataError)?;
+        client
+            .query(&stmt, &[&timestamp, &group_id, &heavy_timestamp])
+            .await
+            .map_err(ApiError::GetGroupDataError)?
+    } else {
+        let stmt = client
+            .prepare_cached(
+                r#"
+SELECT member_name, discord_id, color,
+GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
+quests_last_update, inventory_last_update, equipment_last_update,
+rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
+collection_log_last_update) as last_updated,
+CASE WHEN stats_last_update >= $1::TIMESTAMPTZ THEN stats ELSE NULL END as stats,
+CASE WHEN coordinates_last_update >= $1::TIMESTAMPTZ THEN coordinates ELSE NULL END as coordinates,
+CASE WHEN skills_last_update >= $1::TIMESTAMPTZ THEN skills ELSE NULL END as skills,
+CASE WHEN quests_last_update >= $1::TIMESTAMPTZ THEN quests ELSE NULL END as quests,
+CASE WHEN inventory_last_update >= $1::TIMESTAMPTZ THEN inventory ELSE NULL END as inventory,
+CASE WHEN equipment_last_update >= $1::TIMESTAMPTZ THEN equipment ELSE NULL END as equipment,
+CASE WHEN rune_pouch_last_update >= $1::TIMESTAMPTZ THEN rune_pouch ELSE NULL END as rune_pouch,
+CASE WHEN interacting_last_update >= $1::TIMESTAMPTZ THEN interacting ELSE NULL END as interacting,
+CASE WHEN seed_vault_last_update >= $1::TIMESTAMPTZ THEN seed_vault ELSE NULL END as seed_vault,
+CASE WHEN diary_vars_last_update >= $1::TIMESTAMPTZ THEN diary_vars ELSE NULL END as diary_vars,
+CASE WHEN collection_log_last_update >= $1::TIMESTAMPTZ THEN collection_log ELSE NULL END as collection_log
+FROM groupironman.members WHERE group_id=$2
+"#,
+            )
+            .await?;
+
+        client
+            .query(&stmt, &[&timestamp, &group_id])
+            .await
+            .map_err(ApiError::GetGroupDataError)?
+    };
+
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
         let member_name = row.try_get("member_name")?;
