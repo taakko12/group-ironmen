@@ -648,20 +648,24 @@ DO UPDATE SET recorded_at = excluded.recorded_at, screenshot_url = excluded.scre
     Ok(())
 }
 
-pub async fn get_loot_data(client: &Client, group_id: i64) -> Result<GroupLootData, ApiError> {
+pub async fn get_loot_data(
+    client: &Client,
+    group_id: i64,
+    since: &DateTime<Utc>,
+) -> Result<GroupLootData, ApiError> {
     let stmt = client
         .prepare_cached(
             r#"
 SELECT member_name, item_name, gp_value, image_url, screenshot_url, message_link, recorded_at
 FROM groupironman.loot_drops d
 INNER JOIN groupironman.members m ON m.member_id=d.member_id
-WHERE m.group_id=$1
+WHERE m.group_id=$1 AND d.recorded_at >= $2
 ORDER BY d.recorded_at ASC
 "#,
         )
         .await?;
     let rows = client
-        .query(&stmt, &[&group_id])
+        .query(&stmt, &[&group_id, &since])
         .await
         .map_err(ApiError::GetLootDataError)?;
 
@@ -837,20 +841,24 @@ DO UPDATE SET recorded_at = excluded.recorded_at, message_link = excluded.messag
     Ok(())
 }
 
-pub async fn get_death_data(client: &Client, group_id: i64) -> Result<GroupDeathData, ApiError> {
+pub async fn get_death_data(
+    client: &Client,
+    group_id: i64,
+    since: &DateTime<Utc>,
+) -> Result<GroupDeathData, ApiError> {
     let stmt = client
         .prepare_cached(
             r#"
 SELECT member_name, image_url, message_link, recorded_at
 FROM groupironman.deaths d
 INNER JOIN groupironman.members m ON m.member_id=d.member_id
-WHERE m.group_id=$1
+WHERE m.group_id=$1 AND d.recorded_at >= $2
 ORDER BY d.recorded_at ASC
 "#,
         )
         .await?;
     let rows = client
-        .query(&stmt, &[&group_id])
+        .query(&stmt, &[&group_id, &since])
         .await
         .map_err(ApiError::GetDeathDataError)?;
 
@@ -1133,21 +1141,25 @@ RETURNING id
     Ok(())
 }
 
-pub async fn get_storage_log(client: &Client, group_id: i64) -> Result<GroupStorageLog, ApiError> {
+pub async fn get_storage_log(
+    client: &Client,
+    group_id: i64,
+    since: &DateTime<Utc>,
+) -> Result<GroupStorageLog, ApiError> {
     let stmt = client
         .prepare_cached(
             r#"
 SELECT member_name, item_name, quantity, action, gp_value, message_link, recorded_at
 FROM groupironman.storage_log s
 INNER JOIN groupironman.members m ON m.member_id=s.member_id
-WHERE m.group_id=$1
+WHERE m.group_id=$1 AND s.recorded_at >= $2
 ORDER BY s.recorded_at DESC
 LIMIT 500
 "#,
         )
         .await?;
     let rows = client
-        .query(&stmt, &[&group_id])
+        .query(&stmt, &[&group_id, &since])
         .await
         .map_err(ApiError::GetStorageLogError)?;
 

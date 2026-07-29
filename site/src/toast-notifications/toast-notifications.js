@@ -91,11 +91,18 @@ export class ToastNotifications extends BaseElement {
 
   async poll() {
     try {
+      // Ask the server for only what's changed since the cursor instead of
+      // the entire (ever-growing) loot/death/storage history on every 2s
+      // tick -- that full re-fetch was the single largest source of
+      // Supabase egress found while chasing the 2026-07-29 usage incident.
+      // recent-bank-pings is already server-bounded (LIMIT 20) so it's left
+      // as a full fetch.
+      const since = new Date(this.cursorTime).toISOString();
       const [lootData, deathData, bankPings, storageLog] = await Promise.all([
-        api.getLootData(),
-        api.getDeathData(),
+        api.getLootData(since),
+        api.getDeathData(since),
         api.getRecentBankPings(),
-        api.getStorageLog(),
+        api.getStorageLog(since),
       ]);
       // Held fixed for this whole poll so every entry is compared against
       // the same starting point, then becomes the new cursor once done.

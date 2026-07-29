@@ -259,6 +259,24 @@ pub async fn get_group_data(
     Ok(web::Json(group_members))
 }
 
+fn epoch() -> DateTime<Utc> {
+    DateTime::<Utc>::from_timestamp(0, 0).unwrap()
+}
+
+/// Shared by get-loot-data/get-death-data/get-storage-log: `since` is
+/// optional and absent entirely returns full history (the shape the bot's
+/// backendClient still relies on). toast-notifications.js is the only
+/// caller that actually passes it, polling every 2s for what's new since
+/// its own cursor instead of re-downloading the whole ever-growing history
+/// on every tick -- that was the single largest Supabase egress source
+/// found while chasing the 2026-07-29 usage incident, well past what the
+/// get-group-data polling fix (see api.js/live.rs) accounted for.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SinceQuery {
+    pub since: Option<DateTime<Utc>>,
+}
+
 #[derive(Deserialize)]
 pub enum SkillDataPeriod {
     Day,
@@ -365,9 +383,11 @@ pub async fn add_loot_drop(
 pub async fn get_loot_data(
     auth: Authenticated,
     db_pool: web::Data<Pool>,
+    query: web::Query<SinceQuery>,
 ) -> Result<web::Json<GroupLootData>, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    let loot_data = db::get_loot_data(&client, auth.group_id).await?;
+    let since = query.since.unwrap_or_else(epoch);
+    let loot_data = db::get_loot_data(&client, auth.group_id, &since).await?;
     Ok(web::Json(loot_data))
 }
 
@@ -386,9 +406,11 @@ pub async fn add_death(
 pub async fn get_death_data(
     auth: Authenticated,
     db_pool: web::Data<Pool>,
+    query: web::Query<SinceQuery>,
 ) -> Result<web::Json<GroupDeathData>, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    let death_data = db::get_death_data(&client, auth.group_id).await?;
+    let since = query.since.unwrap_or_else(epoch);
+    let death_data = db::get_death_data(&client, auth.group_id, &since).await?;
     Ok(web::Json(death_data))
 }
 
@@ -428,9 +450,11 @@ pub async fn add_storage_log_entry(
 pub async fn get_storage_log(
     auth: Authenticated,
     db_pool: web::Data<Pool>,
+    query: web::Query<SinceQuery>,
 ) -> Result<web::Json<GroupStorageLog>, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    let storage_log = db::get_storage_log(&client, auth.group_id).await?;
+    let since = query.since.unwrap_or_else(epoch);
+    let storage_log = db::get_storage_log(&client, auth.group_id, &since).await?;
     Ok(web::Json(storage_log))
 }
 

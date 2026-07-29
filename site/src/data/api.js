@@ -305,8 +305,13 @@ class Api {
     return response.json();
   }
 
-  async getLootData() {
-    const response = await fetch(this.lootDataUrl, {
+  // `since` is optional -- omitted, the backend returns full history (what
+  // loot-page/death-page want on a one-time page load). toast-notifications
+  // passes its cursor to poll for only what's new instead of re-downloading
+  // the whole, ever-growing history every 2 seconds.
+  async getLootData(since) {
+    const params = since ? `?since=${encodeURIComponent(since)}` : "";
+    const response = await fetch(`${this.lootDataUrl}${params}`, {
       headers: {
         Authorization: this.groupToken,
       },
@@ -314,8 +319,9 @@ class Api {
     return response.json();
   }
 
-  async getDeathData() {
-    const response = await fetch(this.deathDataUrl, {
+  async getDeathData(since) {
+    const params = since ? `?since=${encodeURIComponent(since)}` : "";
+    const response = await fetch(`${this.deathDataUrl}${params}`, {
       headers: {
         Authorization: this.groupToken,
       },
@@ -466,8 +472,9 @@ class Api {
     return response.json();
   }
 
-  async getStorageLog() {
-    const response = await fetch(this.storageLogUrl, {
+  async getStorageLog(since) {
+    const params = since ? `?since=${encodeURIComponent(since)}` : "";
+    const response = await fetch(`${this.storageLogUrl}${params}`, {
       headers: {
         Authorization: this.groupToken,
       },
