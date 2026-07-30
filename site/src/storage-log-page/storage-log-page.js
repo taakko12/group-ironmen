@@ -1,6 +1,5 @@
 import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
-import { utility } from "../utility";
 
 export class StorageLogPage extends BaseElement {
   constructor() {
@@ -92,9 +91,7 @@ export class StorageLogPage extends BaseElement {
         ? '<span class="storage-log-page__action storage-log-page__action--deposit">Deposited</span>'
         : '<span class="storage-log-page__action storage-log-page__action--withdraw">Withdrew</span>';
     const value = entry.gp_value ? `${entry.gp_value.toLocaleString()} gp` : "";
-    const itemCell = entry.message_link
-      ? `<a href="${utility.discordAppLink(entry.message_link)}" target="_blank" rel="noopener">${entry.item_name}</a>`
-      : entry.item_name;
+    const itemCell = entry.item_name;
 
     return `
 <tr>

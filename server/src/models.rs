@@ -233,7 +233,11 @@ pub struct StorageLogEntry {
     pub quantity: i32,
     pub action: String,
     pub gp_value: Option<i64>,
-    pub message_link: Option<String>,
+    // Just the raw snowflake, not the ~90-byte full message_link URL --
+    // still enough for the frontend to group same-transaction items into
+    // one toast (see toast-notifications.js), at a fraction of the size.
+    // No Discord click-through link is exposed here by design.
+    pub discord_message_id: Option<String>,
     pub time: DateTime<Utc>,
 }
 pub type GroupStorageLog = Vec<StorageLogEntry>;

@@ -1149,7 +1149,7 @@ pub async fn get_storage_log(
     let stmt = client
         .prepare_cached(
             r#"
-SELECT member_name, item_name, quantity, action, gp_value, message_link, recorded_at
+SELECT member_name, item_name, quantity, action, gp_value, discord_message_id, recorded_at
 FROM groupironman.storage_log s
 INNER JOIN groupironman.members m ON m.member_id=s.member_id
 WHERE m.group_id=$1 AND s.recorded_at >= $2
@@ -1171,7 +1171,7 @@ LIMIT 500
             quantity: row.try_get("quantity")?,
             action: row.try_get("action")?,
             gp_value: row.try_get("gp_value")?,
-            message_link: row.try_get("message_link")?,
+            discord_message_id: row.try_get("discord_message_id")?,
             time: row.try_get("recorded_at")?,
         });
     }

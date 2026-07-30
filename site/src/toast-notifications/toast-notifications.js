@@ -173,8 +173,10 @@ export class ToastNotifications extends BaseElement {
 
   // Dink bundles an entire deposit/withdrawal transaction's line items into
   // one Discord message, but we log one storage_log row per item -- group
-  // them back into one toast per transaction (by message_link, since every
-  // item from the same message shares it) instead of one toast per item.
+  // them back into one toast per transaction (by discord_message_id, since
+  // every item from the same message shares it -- the raw snowflake, not
+  // the full message_link URL, which isn't sent to the frontend at all)
+  // instead of one toast per item.
   processStorageLog(storageLog) {
     const newEntries = [];
     for (const entry of storageLog) {
@@ -187,7 +189,7 @@ export class ToastNotifications extends BaseElement {
 
     const groups = new Map();
     for (const entry of newEntries) {
-      const groupKey = entry.message_link || `${entry.member_name}|${entry.action}|${entry.time}`;
+      const groupKey = entry.discord_message_id || `${entry.member_name}|${entry.action}|${entry.time}`;
       if (!groups.has(groupKey)) groups.set(groupKey, []);
       groups.get(groupKey).push(entry);
     }
@@ -264,7 +266,7 @@ export class ToastNotifications extends BaseElement {
       icon: null,
       title: `${first.member_name} ${verb} shared storage`,
       body: `${listHtml(deposits, "+", "deposit")}${listHtml(withdrawals, "−", "withdraw")}`,
-      link: first.message_link,
+      link: null,
     });
   }
 
