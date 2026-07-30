@@ -78,7 +78,6 @@ function getWomGains(period) {
 module.exports = {
   postLootDrop,
   postDeath,
-  postStorageLog,
   getLootData,
   getDeathData,
   getBankPingData,
