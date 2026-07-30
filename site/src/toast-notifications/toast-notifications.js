@@ -144,9 +144,15 @@ export class ToastNotifications extends BaseElement {
     for (const member of lootData) {
       for (const drop of member.drops) {
         const key = `${member.name}|${drop.item_name}|${drop.gp_value}|${drop.time}`;
+        // isNewSinceCursor must run for every entry the server returns, not
+        // just unseen ones -- it's what advances the cursor. Skipping it for
+        // already-seen entries let the cursor get stuck exactly at a tied
+        // timestamp, so the server kept re-returning the same small batch
+        // forever instead of ever going back to an empty response.
+        const isNew = this.isNewSinceCursor(drop.time, key);
         if (this.seenLoot.has(key)) continue;
         this.seenLoot.add(key);
-        if (this.isNewSinceCursor(drop.time, key)) this.showLootToast(member.name, drop);
+        if (isNew) this.showLootToast(member.name, drop);
       }
     }
   }
@@ -155,9 +161,10 @@ export class ToastNotifications extends BaseElement {
     for (const member of deathData) {
       for (const death of member.deaths) {
         const key = `${member.name}|${death.time}`;
+        const isNew = this.isNewSinceCursor(death.time, key);
         if (this.seenDeaths.has(key)) continue;
         this.seenDeaths.add(key);
-        if (this.isNewSinceCursor(death.time, key)) this.showDeathToast(member.name, death);
+        if (isNew) this.showDeathToast(member.name, death);
       }
     }
   }
@@ -165,9 +172,10 @@ export class ToastNotifications extends BaseElement {
   processBankPings(bankPings) {
     for (const ping of bankPings) {
       const key = `${ping.member_name}|${ping.item_id}|${ping.reason}|${ping.created_at}`;
+      const isNew = this.isNewSinceCursor(ping.created_at, key);
       if (this.seenBankPings.has(key)) continue;
       this.seenBankPings.add(key);
-      if (this.isNewSinceCursor(ping.created_at, key)) this.showBankPingToast(ping);
+      if (isNew) this.showBankPingToast(ping);
     }
   }
 
@@ -181,9 +189,10 @@ export class ToastNotifications extends BaseElement {
     const newEntries = [];
     for (const entry of storageLog) {
       const key = `${entry.member_name}|${entry.item_name}|${entry.quantity}|${entry.action}|${entry.time}`;
+      const isNew = this.isNewSinceCursor(entry.time, key);
       if (this.seenStorageLog.has(key)) continue;
       this.seenStorageLog.add(key);
-      if (this.isNewSinceCursor(entry.time, key)) newEntries.push(entry);
+      if (isNew) newEntries.push(entry);
     }
     if (newEntries.length === 0) return;
 
