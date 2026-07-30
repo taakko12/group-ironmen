@@ -112,6 +112,19 @@ export class ToastNotifications extends BaseElement {
       this.processDeaths(deathData);
       this.processBankPings(bankPings);
       this.processStorageLog(storageLog);
+      // If every row the server sent back sits at exactly cursorTime (a
+      // genuine timestamp tie, not just an already-seen entry -- that case
+      // is handled by isNewSinceCursor itself), pendingCursorTime can only
+      // ever equal cursorTime; nothing ever pushes it past a tie. Since
+      // recorded_at is in the past by the time we see it, nothing new can
+      // ever land exactly on this millisecond again, so it's always safe
+      // to step strictly past it once a poll confirms there's nothing left
+      // to advance past it naturally -- otherwise the same handful of rows
+      // gets re-fetched every 2s forever instead of settling into empty
+      // responses.
+      if (this.pendingCursorTime === this.cursorTime) {
+        this.pendingCursorTime += 1;
+      }
       this.cursorTime = this.pendingCursorTime;
       this.cursorKeys = this.pendingCursorKeys;
       window.localStorage.setItem(
