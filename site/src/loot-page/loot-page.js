@@ -59,9 +59,10 @@ export class LootPage extends BaseElement {
 
   handlePeriodChange() {
     this.period = this.periodSelect.value;
-    if (this.lootData) {
-      this.renderAll();
-    }
+    // Widening the period (e.g. Day -> Month) needs a fresh fetch -- the
+    // previous load only asked the server for the narrower window, so the
+    // older data was never downloaded in the first place.
+    this.load(this.currentGroupData);
   }
 
   handleRefreshClicked() {
@@ -78,7 +79,14 @@ export class LootPage extends BaseElement {
     this.chartContainer.appendChild(loader);
 
     try {
-      const [lootData] = await Promise.all([api.getLootData(), this.waitForChartjs()]);
+      // The period selector doubles as a date-range filter on the request
+      // itself now, not just on what's displayed -- loot/death history only
+      // ever grows, so downloading the whole thing by default (the old
+      // behavior) got more expensive every single day. Default period is
+      // "Day", so a fresh page load only pulls the last 24 hours; "All Time"
+      // is still available, just an explicit choice instead of the default.
+      const since = this.period === "AllTime" ? undefined : LootPage.cutoffForPeriod(this.period).toISOString();
+      const [lootData] = await Promise.all([api.getLootData(since), this.waitForChartjs()]);
       this.lootData = lootData;
       this.renderAll();
     } catch (err) {
@@ -88,14 +96,10 @@ export class LootPage extends BaseElement {
   }
 
   renderAll() {
-    const cutoff = LootPage.cutoffForPeriod(this.period);
     const selectedPlayer = this.playerFilter.value;
-    const filteredLoot = this.lootData
-      .filter((member) => selectedPlayer === "@ALL" || !selectedPlayer || member.name === selectedPlayer)
-      .map((member) => ({
-        name: member.name,
-        drops: member.drops.filter((drop) => new Date(drop.time) >= cutoff),
-      }));
+    const filteredLoot = this.lootData.filter(
+      (member) => selectedPlayer === "@ALL" || !selectedPlayer || member.name === selectedPlayer
+    );
 
     this.renderLeaderboard(filteredLoot);
     this.renderChart(filteredLoot);

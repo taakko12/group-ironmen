@@ -31,9 +31,10 @@ export class DeathPage extends BaseElement {
 
   handlePeriodChange() {
     this.period = this.periodSelect.value;
-    if (this.deathData) {
-      this.renderAll();
-    }
+    // Widening the period (e.g. Day -> Month) needs a fresh fetch -- the
+    // previous load only asked the server for the narrower window, so the
+    // older data was never downloaded in the first place.
+    this.load();
   }
 
   handleRefreshClicked() {
@@ -44,7 +45,14 @@ export class DeathPage extends BaseElement {
     if (!this.isConnected) return;
 
     try {
-      this.deathData = await api.getDeathData();
+      // The period selector doubles as a date-range filter on the request
+      // itself now, not just on what's displayed -- death history only ever
+      // grows, so downloading the whole thing by default (the old behavior)
+      // got more expensive every single day. Default period is "Day", so a
+      // fresh page load only pulls the last 24 hours; "All Time" is still
+      // available, just an explicit choice instead of the default.
+      const since = this.period === "AllTime" ? undefined : DeathPage.cutoffForPeriod(this.period).toISOString();
+      this.deathData = await api.getDeathData(since);
       this.renderAll();
     } catch (err) {
       console.error(err);
@@ -53,13 +61,7 @@ export class DeathPage extends BaseElement {
   }
 
   renderAll() {
-    const cutoff = DeathPage.cutoffForPeriod(this.period);
-    const filteredDeaths = this.deathData.map((member) => ({
-      name: member.name,
-      deaths: member.deaths.filter((death) => new Date(death.time) >= cutoff),
-    }));
-
-    this.renderLeaderboard(filteredDeaths);
+    this.renderLeaderboard(this.deathData);
   }
 
   static cutoffForPeriod(period) {

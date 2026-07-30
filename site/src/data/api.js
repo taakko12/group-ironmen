@@ -297,10 +297,11 @@ class Api {
     return response.json();
   }
 
-  // `since` is optional -- omitted, the backend returns full history (what
-  // loot-page/death-page want on a one-time page load). toast-notifications
-  // passes its cursor to poll for only what's new instead of re-downloading
-  // the whole, ever-growing history every 2 seconds.
+  // `since` is optional -- omitted, the backend returns full history (the
+  // Discord bot still relies on this). loot-page passes its period
+  // selector's cutoff instead, so a page load only downloads what the
+  // selected range actually needs rather than the whole, ever-growing
+  // history by default.
   async getLootData(since) {
     const params = since ? `?since=${encodeURIComponent(since)}` : "";
     const response = await fetch(`${this.lootDataUrl}${params}`, {
