@@ -133,13 +133,6 @@
       route-outlet=".authed-section__outlet"
       route-wrapper=".authed-section"
     ></app-route>
-    <app-route
-      route-path="/storage-log"
-      route-component="storage-log-page"
-      route-outlet=".authed-section__outlet"
-      route-wrapper=".authed-section"
-    ></app-route>
-
     <canvas-map id="background-worldmap"></canvas-map>
     <wrap-routes class="unauthed-section" route-path="">
       <template>
@@ -160,7 +153,6 @@
 
     <rs-tooltip></rs-tooltip>
     <confirm-dialog class="dialog"></confirm-dialog>
-    <toast-notifications></toast-notifications>
     <script>{{js}}</script>
     <app-route route-path="*" route-redirect="/"></app-route>
   </body>

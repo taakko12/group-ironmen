@@ -65,10 +65,6 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/request-bank-batch`;
   }
 
-  get recentBankPingsUrl() {
-    return `${this.baseUrl}/group/${this.groupName}/recent-bank-pings`;
-  }
-
   get womGainsUrl() {
     return `${this.baseUrl}/group/${this.groupName}/wom-gains`;
   }
@@ -91,10 +87,6 @@ class Api {
 
   get deathDataUrl() {
     return `${this.baseUrl}/group/${this.groupName}/get-death-data`;
-  }
-
-  get storageLogUrl() {
-    return `${this.baseUrl}/group/${this.groupName}/get-storage-log`;
   }
 
   get captchaEnabledUrl() {
@@ -461,25 +453,6 @@ class Api {
     });
 
     return response;
-  }
-
-  async getRecentBankPings() {
-    const response = await fetch(this.recentBankPingsUrl, {
-      headers: {
-        Authorization: this.groupToken,
-      },
-    });
-    return response.json();
-  }
-
-  async getStorageLog(since) {
-    const params = since ? `?since=${encodeURIComponent(since)}` : "";
-    const response = await fetch(`${this.storageLogUrl}${params}`, {
-      headers: {
-        Authorization: this.groupToken,
-      },
-    });
-    return response.json();
   }
 
   async getWomGains(period) {

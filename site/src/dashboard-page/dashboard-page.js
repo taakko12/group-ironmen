@@ -2,15 +2,6 @@ import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
 import { utility } from "../utility";
 
-// This refetches the *entire* loot/death history every tick just to find
-// each member's single most-recent drop/death (see renderCards) -- there's
-// no cursor here like toast-notifications has, so keep this interval long.
-// A manual refresh button already exists for anyone who wants it sooner.
-// ponytail: proper fix is a bounded "most-recent-per-member" endpoint;
-// deferred under incident time pressure -- revisit if this still shows up
-// meaningfully in Supabase egress after the toast-notifications fix lands.
-const LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-
 export class DashboardPage extends BaseElement {
   constructor() {
     super();
@@ -37,20 +28,6 @@ export class DashboardPage extends BaseElement {
     this.eventListener(document, "keydown", this.handleLightboxKeydown.bind(this));
 
     this.subscribeOnce("get-group-data", this.load.bind(this));
-    this.liveRefreshInterval = window.setInterval(this.handleLiveRefresh.bind(this), LIVE_REFRESH_INTERVAL_MS);
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    if (this.liveRefreshInterval) {
-      window.clearInterval(this.liveRefreshInterval);
-    }
-  }
-
-  handleLiveRefresh() {
-    if (this.currentGroupData) {
-      this.loadWomAndRender();
-    }
   }
 
   handlePeriodChange() {

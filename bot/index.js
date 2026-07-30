@@ -2,7 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
-const { processLootMessage, processDeathMessage, processGroupStorageMessage } = require('./messageProcessor');
+const { processLootMessage, processDeathMessage } = require('./messageProcessor');
 const { registerCommands } = require('./deploy-commands');
 const itemData = require('./itemData');
 const bankPings = require('./bankPings');
@@ -13,7 +13,6 @@ const assistant = require('./assistant');
 
 const LOOT_CHANNEL_ID = process.env.LOOT_CHANNEL_ID;
 const DEATH_CHANNEL_ID = process.env.DEATH_CHANNEL_ID;
-const GROUP_STORAGE_CHANNEL_ID = process.env.GROUP_STORAGE_CHANNEL_ID;
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
@@ -84,10 +83,6 @@ client.on('messageCreate', async (message) => {
 
     if (LOOT_CHANNEL_ID && message.channelId === LOOT_CHANNEL_ID) {
       await processLootMessage(message);
-    }
-
-    if (GROUP_STORAGE_CHANNEL_ID && message.channelId === GROUP_STORAGE_CHANNEL_ID) {
-      await processGroupStorageMessage(message);
     }
     return;
   }

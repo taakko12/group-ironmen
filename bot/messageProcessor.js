@@ -10,11 +10,8 @@ const {
   parseLootPlayer,
   parseDeathMessage,
   parseDeathImage,
-  isGroupStorageEmbed,
-  parseGroupStorageEmbed,
 } = require('./dinkParser');
-const { postLootDrop, postDeath, postStorageLog } = require('./backendClient');
-const { getItemId } = require('./itemData');
+const { postLootDrop, postDeath } = require('./backendClient');
 const { maybeRoastDeath } = require('./deathRoast');
 
 function messageLink(message) {
@@ -85,45 +82,4 @@ async function processLootMessage(message) {
   return recorded;
 }
 
-// One message can bundle multiple deposits and withdrawals into a single
-// embed, so each item gets its own entry_index within the message for
-// dedup purposes (mirrors processLootMessage's embedIndex).
-async function processGroupStorageMessage(message) {
-  let recorded = 0;
-  let entryIndex = 0;
-  for (const embed of message.embeds) {
-    if (!isGroupStorageEmbed(embed)) continue;
-    const { player, deposits, withdrawals } = parseGroupStorageEmbed(embed);
-    if (!player) continue;
-
-    const items = [
-      ...deposits.map((d) => ({ ...d, action: 'deposit' })),
-      ...withdrawals.map((w) => ({ ...w, action: 'withdraw' })),
-    ];
-
-    for (const { item, quantity, gpValue, action } of items) {
-      try {
-        await postStorageLog({
-          member_name: player,
-          item_id: getItemId(item),
-          item_name: item,
-          quantity,
-          action,
-          gp_value: gpValue,
-          message_link: messageLink(message),
-          discord_message_id: message.id,
-          entry_index: entryIndex,
-          time: message.createdAt.toISOString(),
-        });
-        console.log(`[storage] Recorded ${action} of ${quantity} x ${item} for "${player}"`);
-        recorded++;
-      } catch (err) {
-        console.error(`[storage] Failed to record ${action} for "${player}": ${err.message}`);
-      }
-      entryIndex++;
-    }
-  }
-  return recorded;
-}
-
-module.exports = { processDeathMessage, processLootMessage, processGroupStorageMessage };
+module.exports = { processDeathMessage, processLootMessage };

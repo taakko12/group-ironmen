@@ -38,10 +38,6 @@ function postDeath(death) {
   return post('/death', death);
 }
 
-function postStorageLog(entry) {
-  return post('/storage-log', entry);
-}
-
 function getLootData() {
   return get('/get-loot-data');
 }
@@ -56,9 +52,13 @@ function getBankPingData() {
 
 // discord_id is returned unconditionally regardless of from_time (only the
 // stat/inventory/etc columns are gated by it), so the epoch is just "give me
-// every member".
+// every member". include_heavy=false skips bank/potion_storage -- nothing
+// that calls this (memberCache, dryStreak, assistant) ever reads either
+// field, so there's no reason to pay for pulling everyone's full bank
+// contents on every call.
 function getGroupMembers() {
-  return get(`/get-group-data?from_time=${encodeURIComponent(new Date(0).toISOString())}`);
+  const from_time = encodeURIComponent(new Date(0).toISOString());
+  return get(`/get-group-data?from_time=${from_time}&include_heavy=false`);
 }
 
 // { member_name: { wom_boss_key: absolute_kill_count } } for every member,
