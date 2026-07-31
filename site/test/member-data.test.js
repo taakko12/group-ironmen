@@ -3,6 +3,8 @@ import { MemberData } from "../src/data/member-data";
 import { Item } from "../src/data/item";
 import { Quest } from "../src/data/quest";
 import { pubsub } from "../src/data/pubsub";
+import { BankedXp } from "../src/data/banked-xp-data";
+import { bankedXpSelection } from "../src/data/banked-xp-selection";
 
 describe("member-data", () => {
   let originalLookupByName;
@@ -12,6 +14,8 @@ describe("member-data", () => {
     Item.itemDetails = {
       4151: { id: 4151, name: "Abyssal whip" },
     };
+    BankedXp.data = undefined;
+    bankedXpSelection.selections = {};
   });
 
   it("publishes parsed collection log payload on collection_log_v2 updates", () => {
@@ -100,7 +104,12 @@ describe("member-data", () => {
     Item.itemDetails[244] = { id: 244, name: "Attack potion(1)" };
     const member = new MemberData("Alice");
 
-    const updated = member.update({ potion_storage: [{ id: 244, quantity: 6 }, { id: 244, quantity: 2 }] });
+    const updated = member.update({
+      potion_storage: [
+        { id: 244, quantity: 6 },
+        { id: 244, quantity: 2 },
+      ],
+    });
 
     expect(updated.has("potion_storage")).toBe(true);
     expect(member.itemQuantities.potionStorage.get(244)).toBe(8);
@@ -147,6 +156,67 @@ describe("member-data", () => {
     expect(member.itemQuantities.potionStorage.get(244)).toBeUndefined();
     expect(member.itemQuantities.potionStorage.size).toBe(0);
     expect(member.totalItemQuantity(4151)).toBe(2);
+  });
+
+  it("computes banked xp, defaulting to the highest-xp activity the member's skill level qualifies for", () => {
+    Item.itemDetails[440] = { id: 440, name: "Iron ore" };
+    BankedXp.data = {
+      440: [
+        { id: "iron_bar", skill: "Smithing", name: "Iron bar", level: 15, xp: 12.5 },
+        { id: "steel_bar", skill: "Smithing", name: "Steel bar", level: 30, xp: 17.5 },
+      ],
+    };
+    const member = new MemberData("Alice");
+    member.skills = { Smithing: { level: 20 } };
+    member.update({ bank: [{ id: 440, quantity: 10 }] });
+
+    const bySkill = member.computeBankedXp();
+
+    expect(bySkill.Smithing.xp).toBe(125);
+    expect(bySkill.Smithing.items).toHaveLength(1);
+    expect(bySkill.Smithing.items[0].activity.id).toBe("iron_bar");
+  });
+
+  it("falls back to the lowest-level activity when the member qualifies for none", () => {
+    Item.itemDetails[440] = { id: 440, name: "Iron ore" };
+    BankedXp.data = {
+      440: [{ id: "steel_bar", skill: "Smithing", name: "Steel bar", level: 30, xp: 17.5 }],
+    };
+    const member = new MemberData("Alice");
+    member.skills = { Smithing: { level: 1 } };
+    member.update({ bank: [{ id: 440, quantity: 2 }] });
+
+    const bySkill = member.computeBankedXp();
+
+    expect(bySkill.Smithing.xp).toBe(35);
+  });
+
+  it("uses a manually selected activity override instead of the computed default", () => {
+    Item.itemDetails[440] = { id: 440, name: "Iron ore" };
+    BankedXp.data = {
+      440: [
+        { id: "iron_bar", skill: "Smithing", name: "Iron bar", level: 15, xp: 12.5 },
+        { id: "steel_bar", skill: "Smithing", name: "Steel bar", level: 30, xp: 17.5 },
+      ],
+    };
+    bankedXpSelection.set(440, "iron_bar");
+    const member = new MemberData("Alice");
+    member.skills = { Smithing: { level: 99 } };
+    member.update({ bank: [{ id: 440, quantity: 10 }] });
+
+    const bySkill = member.computeBankedXp();
+
+    expect(bySkill.Smithing.items[0].activity.id).toBe("iron_bar");
+    expect(bySkill.Smithing.xp).toBe(125);
+  });
+
+  it("ignores bank items with no banked-xp data", () => {
+    Item.itemDetails[4151] = { id: 4151, name: "Abyssal whip" };
+    BankedXp.data = {};
+    const member = new MemberData("Alice");
+    member.update({ bank: [{ id: 4151, quantity: 1 }] });
+
+    expect(member.computeBankedXp()).toEqual({});
   });
 
   afterEach(() => {

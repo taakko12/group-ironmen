@@ -8,6 +8,7 @@ import "./inventory-item/inventory-item.js";
 import "./inventory-pager/inventory-pager.js";
 import "./app-navigation/app-navigation.js";
 import "./items-page/items-page.js";
+import "./banked-xp-page/banked-xp-page.js";
 import "./app-route/app-route.js";
 import "./map-page/map-page.js";
 import "./side-panel/side-panel.js";

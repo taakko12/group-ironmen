@@ -4,6 +4,8 @@ import { Skill, SkillName } from "./skill";
 import { pubsub } from "./pubsub";
 import { utility } from "../utility";
 import { AchievementDiary } from "./diaries";
+import { BankedXp } from "./banked-xp-data";
+import { bankedXpSelection } from "./banked-xp-selection";
 
 const playerColors = [
   "hsl(41, 100%, 40%)", // yellow
@@ -315,6 +317,32 @@ export class MemberData {
       this.combatLevel = combatLevel;
       this.publishUpdate("combatLevel");
     }
+  }
+
+  // Total XP "locked up" in this member's bank if every held item were put
+  // toward its (selectable) training activity -- ported from the RuneLite
+  // "banked-experience" plugin's data tables. Purely a client-side
+  // computation over data the site already fetched (bank contents) plus a
+  // static reference file, so calling this costs zero extra server/DB load.
+  computeBankedXp() {
+    const bySkill = {};
+    for (const [itemId, quantity] of this.itemQuantities.bank) {
+      if (quantity <= 0) continue;
+
+      const activities = BankedXp.activitiesForItem(itemId);
+      if (activities.length === 0) continue;
+
+      const selectedId = bankedXpSelection.get(itemId);
+      const activity =
+        activities.find((a) => a.id === selectedId) ??
+        BankedXp.defaultActivity(activities, (skill) => this.skills?.[skill]?.level ?? 1);
+
+      const xp = activity.xp * quantity;
+      if (!bySkill[activity.skill]) bySkill[activity.skill] = { xp: 0, items: [] };
+      bySkill[activity.skill].xp += xp;
+      bySkill[activity.skill].items.push({ itemId, quantity, activity, activities, xp });
+    }
+    return bySkill;
   }
 
   hasQuestComplete(questName) {

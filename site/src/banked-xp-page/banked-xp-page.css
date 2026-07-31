@@ -1,0 +1,94 @@
+banked-xp-page {
+  display: block;
+}
+
+.banked-xp-page__head {
+  display: flex;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 6px;
+  flex-wrap: wrap;
+}
+
+.banked-xp-page__hint {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+
+.banked-xp-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.banked-xp-page__empty {
+  opacity: 0.7;
+  padding: 12px 0;
+}
+
+.banked-xp-page__skill-head {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.banked-xp-page__skill-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.banked-xp-page__skill-name {
+  flex: 1;
+}
+
+.banked-xp-page__skill-xp {
+  color: var(--orange);
+  font-weight: bold;
+}
+
+.banked-xp-page__items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 10px 8px 44px;
+}
+
+.banked-xp-page__items--hidden {
+  display: none;
+}
+
+.banked-xp-page__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.banked-xp-page__item-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.banked-xp-page__item-name {
+  flex: 1;
+  min-width: 120px;
+}
+
+.banked-xp-page__item-activity-name {
+  opacity: 0.7;
+}
+
+.banked-xp-page__item-xp {
+  min-width: 90px;
+  text-align: right;
+}
