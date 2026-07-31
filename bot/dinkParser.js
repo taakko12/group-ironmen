@@ -15,28 +15,21 @@ function dateToSnowflake(date) {
 // backfill history the live listener missed.
 async function fetchAllMessages(channel, afterSnowflake = null) {
   const all = [];
-  if (afterSnowflake) {
-    let lastId = afterSnowflake;
-    while (true) {
-      const batch = await channel.messages.fetch({ limit: 100, after: lastId });
-      if (batch.size === 0) break;
-      const msgs = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-      all.push(...msgs);
-      lastId = msgs[msgs.length - 1].id;
-      if (batch.size < 100) break;
-    }
-  } else {
-    let lastId = null;
-    while (true) {
-      const options = { limit: 100 };
-      if (lastId) options.before = lastId;
-      const batch = await channel.messages.fetch(options);
-      if (batch.size === 0) break;
-      const msgs = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-      all.push(...msgs);
-      lastId = batch.sort((a, b) => a.createdTimestamp - b.createdTimestamp).first().id;
-      if (batch.size < 100) break;
-    }
+  // Paging forward from a snowflake uses `after` and walks newest-cursor
+  // last; paging all of history uses `before` and walks oldest-cursor last.
+  // Same loop either way -- only the cursor param and which end of the
+  // (already time-sorted) batch becomes the next cursor differs.
+  const cursorKey = afterSnowflake ? 'after' : 'before';
+  let cursor = afterSnowflake;
+  while (true) {
+    const options = { limit: 100 };
+    if (cursor) options[cursorKey] = cursor;
+    const batch = await channel.messages.fetch(options);
+    if (batch.size === 0) break;
+    const msgs = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+    all.push(...msgs);
+    cursor = afterSnowflake ? msgs[msgs.length - 1].id : msgs[0].id;
+    if (batch.size < 100) break;
   }
   return all;
 }
