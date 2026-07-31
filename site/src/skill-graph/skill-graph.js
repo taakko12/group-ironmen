@@ -215,9 +215,7 @@ export class SkillGraph extends BaseElement {
 
     const groupTotalSign = groupTotalXpGain > 0 ? "+" : "";
     const avgGain =
-      memberEntriesSortedByXpGain.length > 0
-        ? Math.round(groupTotalXpGain / memberEntriesSortedByXpGain.length)
-        : 0;
+      memberEntriesSortedByXpGain.length > 0 ? Math.round(groupTotalXpGain / memberEntriesSortedByXpGain.length) : 0;
 
     let groupTotalLevel = 0;
     if (this.skillName === SkillName.Overall) {
@@ -299,15 +297,11 @@ ${filters}
     for (const checkbox of this.memberFiltersContainer.querySelectorAll("input[type=checkbox]")) {
       this.eventListener(checkbox, "change", this.handleMemberFilterChange.bind(this));
     }
-    this.eventListener(
-      this.memberFiltersContainer.querySelector(".skill-graph__member-filter-all"),
-      "click",
-      () => this.setAllMembersVisible(true)
+    this.eventListener(this.memberFiltersContainer.querySelector(".skill-graph__member-filter-all"), "click", () =>
+      this.setAllMembersVisible(true)
     );
-    this.eventListener(
-      this.memberFiltersContainer.querySelector(".skill-graph__member-filter-none"),
-      "click",
-      () => this.setAllMembersVisible(false)
+    this.eventListener(this.memberFiltersContainer.querySelector(".skill-graph__member-filter-none"), "click", () =>
+      this.setAllMembersVisible(false)
     );
   }
 

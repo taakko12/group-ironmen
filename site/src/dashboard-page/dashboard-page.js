@@ -287,7 +287,9 @@ export class DashboardPage extends BaseElement {
     return `<div class="dashboard-page__stats-list">${gains.skills_gained
       .map(
         (s) =>
-          `<div class="dashboard-page__stats-row"><span>${s.name}</span><span class="dashboard-page__stats-value">+${s.xp.toLocaleString()} xp</span></div>`
+          `<div class="dashboard-page__stats-row"><span>${
+            s.name
+          }</span><span class="dashboard-page__stats-value">+${s.xp.toLocaleString()} xp</span></div>`
       )
       .join("")}</div>`;
   }
@@ -299,7 +301,9 @@ export class DashboardPage extends BaseElement {
     return `<div class="dashboard-page__stats-list">${gains.bosses_gained
       .map(
         (b) =>
-          `<div class="dashboard-page__stats-row"><span>${b.name}</span><span class="dashboard-page__stats-value">${b.kills.toLocaleString()} kc</span></div>`
+          `<div class="dashboard-page__stats-row"><span>${
+            b.name
+          }</span><span class="dashboard-page__stats-value">${b.kills.toLocaleString()} kc</span></div>`
       )
       .join("")}</div>`;
   }
@@ -327,7 +331,9 @@ export class DashboardPage extends BaseElement {
     let media = "";
     if (imageUrl) {
       const discordOverlay = messageLink
-        ? `<a class="dashboard-page__discord-link" href="${utility.discordAppLink(messageLink)}" target="_blank" rel="noopener" title="View in Discord">↗</a>`
+        ? `<a class="dashboard-page__discord-link" href="${utility.discordAppLink(
+            messageLink
+          )}" target="_blank" rel="noopener" title="View in Discord">↗</a>`
         : "";
       media = `
 <div class="dashboard-page__screenshot-wrap">
@@ -340,7 +346,9 @@ export class DashboardPage extends BaseElement {
 
     const standaloneDiscordLink =
       !imageUrl && messageLink
-        ? `<a class="dashboard-page__discord-link dashboard-page__discord-link--standalone" href="${utility.discordAppLink(messageLink)}" target="_blank" rel="noopener">View in Discord ↗</a>`
+        ? `<a class="dashboard-page__discord-link dashboard-page__discord-link--standalone" href="${utility.discordAppLink(
+            messageLink
+          )}" target="_blank" rel="noopener">View in Discord ↗</a>`
         : "";
 
     return `

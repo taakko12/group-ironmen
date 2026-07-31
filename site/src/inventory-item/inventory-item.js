@@ -80,7 +80,9 @@ export class InventoryItem extends BaseElement {
 </div>
 ${
   quantity > 0
-    ? `<input type="checkbox" id="${this.checkboxId(playerName)}" class="inventory-item__request-checkbox" data-player-name="${playerName}"
+    ? `<input type="checkbox" id="${this.checkboxId(
+        playerName
+      )}" class="inventory-item__request-checkbox" data-player-name="${playerName}"
         ${bankRequestSelection.has(playerName, this.itemId) ? "checked" : ""} /><label for="${this.checkboxId(
         playerName
       )}" class="inventory-item__request-label" title="Select to request ${playerName} bank this"></label>`

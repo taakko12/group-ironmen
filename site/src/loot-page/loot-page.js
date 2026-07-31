@@ -204,7 +204,9 @@ export class LootPage extends BaseElement {
     const label = `${drop.item_name} (${drop.gp_value.toLocaleString()} gp)`;
     const content = `${img}<span>${label}</span>`;
     return drop.message_link
-      ? `<a class="loot-page__recent-link" href="${utility.discordAppLink(drop.message_link)}" target="_blank" rel="noopener">${content}</a>`
+      ? `<a class="loot-page__recent-link" href="${utility.discordAppLink(
+          drop.message_link
+        )}" target="_blank" rel="noopener">${content}</a>`
       : `<span class="loot-page__recent-link">${content}</span>`;
   }
 

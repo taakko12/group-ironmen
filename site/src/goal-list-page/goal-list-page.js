@@ -49,9 +49,7 @@ export class GoalListPage extends BaseElement {
     let options = "";
     for (const member of members) {
       if (member.name === "@SHARED") continue;
-      options += `<option value="${member.name}" ${member.name === selected ? "selected" : ""}>${
-        member.name
-      }</option>`;
+      options += `<option value="${member.name}" ${member.name === selected ? "selected" : ""}>${member.name}</option>`;
     }
     this.memberSelect.innerHTML = options;
   }
