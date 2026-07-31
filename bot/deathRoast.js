@@ -7,7 +7,6 @@
 // model request against the free tier.
 
 const { SYSTEM_PROMPT } = require('./personality');
-const { getDiscordId } = require('./memberCache');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
@@ -59,14 +58,10 @@ async function maybeRoastDeath(message, death) {
   if (Math.random() >= ROAST_CHANCE) return;
 
   try {
-    const [roast, discordId] = await Promise.all([
-      generateRoast(death.image_url),
-      getDiscordId(death.member_name).catch(() => null),
-    ]);
+    const roast = await generateRoast(death.image_url);
     if (!roast) return;
 
-    const who = discordId ? `<@${discordId}>` : `**${death.member_name}**`;
-    await message.channel.send(`${who} ${roast}`);
+    await message.channel.send(`**${death.member_name}** ${roast}`);
   } catch (err) {
     console.error(`[deathRoast] Failed to roast death for "${death.member_name}": ${err.message}`);
   }

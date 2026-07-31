@@ -257,7 +257,7 @@ async function handleMention(message) {
   await message.channel.sendTyping().catch(() => {});
   try {
     const answer = await answerQuestion(question, askerName);
-    if (answer) await message.reply(answer);
+    if (answer) await message.channel.send(answer);
   } catch (err) {
     console.error(`[assistant] Failed to answer question: ${err.message}`);
   }

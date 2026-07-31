@@ -69,7 +69,7 @@ async function pollOnce(client) {
       .join(', ');
     const text = isManual
       ? `📢 <@${group.discordId}> someone asked you to bank: ${itemList}`
-      : `⚠️ <@${group.discordId}> you went offline holding: ${itemList} — go bank ${
+      : `⚠️ **${group.memberName}** went offline holding: ${itemList} — go bank ${
           group.items.length === 1 ? 'it' : 'them'
         }!`;
 
