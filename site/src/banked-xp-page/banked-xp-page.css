@@ -44,9 +44,14 @@ banked-xp-page {
 }
 
 .banked-xp-page__member-total {
-  color: var(--orange);
-  font-weight: bold;
-  font-size: 0.85em;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.6em;
+}
+
+.banked-xp-page__member-total .banked-xp-page__xp-obtainable {
+  font-size: 1.4em;
 }
 
 .banked-xp-page__skills {
@@ -79,8 +84,14 @@ banked-xp-page {
 }
 
 .banked-xp-page__skill-xp {
-  color: var(--orange);
-  font-weight: bold;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.banked-xp-page__skill-xp .banked-xp-page__xp-obtainable {
+  font-size: 1.3em;
 }
 
 .banked-xp-page__items {
@@ -101,11 +112,11 @@ banked-xp-page {
    row's native <select> width dragging everything after it out of line. */
 .banked-xp-page__item {
   display: grid;
-  grid-template-columns: 24px minmax(140px, 300px) minmax(180px, 240px) 1fr 120px;
+  grid-template-columns: 24px minmax(140px, 300px) minmax(180px, 240px) 1fr minmax(150px, 210px);
   align-items: center;
   column-gap: 10px;
   row-gap: 4px;
-  padding: 6px 0;
+  padding: 8px 0;
 }
 
 .banked-xp-page__item + .banked-xp-page__item {
@@ -145,25 +156,56 @@ banked-xp-page {
 
 .banked-xp-page__item-xp {
   grid-column: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   min-width: 0;
-  text-align: right;
   white-space: nowrap;
 }
 
-.banked-xp-page__xp-full {
+/* Shared by the skill header, item row, and member total (each nested
+   context bumps .xp-obtainable's font-size further -- see those rules). The
+   words "obtainable"/"potential" plus the size/weight/color difference
+   double up so which number is which doesn't rely on either alone. */
+.banked-xp-page__xp-obtainable {
+  font-size: 1.15em;
+  font-weight: bold;
+  color: var(--orange);
+}
+
+.banked-xp-page__xp-potential {
+  font-size: 1em;
   color: var(--muted-text);
-  font-size: 0.85em;
+}
+
+.banked-xp-page__xp-label {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .banked-xp-page__secondary {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 3px;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
   background: var(--elevated);
-  font-size: 0.85em;
+  font-size: 1em;
   white-space: nowrap;
+}
+
+.banked-xp-page__secondary-name {
+  color: var(--muted-text);
+}
+
+.banked-xp-page__secondary--short .banked-xp-page__secondary-name {
+  color: var(--short-text);
+}
+
+.banked-xp-page__secondary-count {
+  font-weight: bold;
 }
 
 /* Shortfall is never color-only: solid (not translucent) high-contrast
@@ -180,8 +222,8 @@ banked-xp-page {
 }
 
 .banked-xp-page__secondary-icon {
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
 }
 
@@ -211,6 +253,6 @@ banked-xp-page {
 
   .banked-xp-page__item-xp {
     grid-area: xp;
-    text-align: left;
+    align-items: flex-start;
   }
 }

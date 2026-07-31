@@ -120,27 +120,40 @@ export class BankedXpPage extends BaseElement {
       .map((secondary) => {
         const needed = item.quantity * secondary.qty;
         const short = secondary.have < needed;
+        const name = Item.itemName(secondary.itemId);
         return `
-<span class="banked-xp-page__secondary ${short ? "banked-xp-page__secondary--short" : ""}" title="${Item.itemName(
-          secondary.itemId
-        )}: have ${Math.floor(secondary.have).toLocaleString()}, need ${Math.ceil(needed).toLocaleString()}">
+<span class="banked-xp-page__secondary ${
+          short ? "banked-xp-page__secondary--short" : ""
+        }" title="${name}: have ${Math.floor(secondary.have).toLocaleString()}, need ${Math.ceil(
+          needed
+        ).toLocaleString()}">
   <img class="banked-xp-page__secondary-icon" src="${Item.imageUrl(secondary.itemId, secondary.have)}" alt="" />
-  ${Math.floor(secondary.have).toLocaleString()}/${Math.ceil(needed).toLocaleString()}
+  <span class="banked-xp-page__secondary-name">${name}</span>
+  <span class="banked-xp-page__secondary-count">${Math.floor(secondary.have).toLocaleString()}/${Math.ceil(
+          needed
+        ).toLocaleString()}</span>
 </span>`;
       })
       .join("")}</span>`;
   }
 
-  // Only shows the "full" figure when secondaries actually constrain the
-  // outcome -- an item with no secondary requirement (the common case) just
-  // shows one number instead of the same value twice.
+  // "Obtainable" (bold, prominent) is what the member can actually get right
+  // now given secondaries on hand; "Potential" (smaller, muted) is what it'd
+  // be with unlimited secondaries. Only shows Potential when it differs from
+  // Obtainable -- an item with no secondary requirement (the common case)
+  // just shows one number instead of the same value twice with a label
+  // nobody needs.
   static xpDisplayHtml(xp, effectiveXp) {
     if (Math.round(xp) === Math.round(effectiveXp)) {
-      return `${Math.round(xp).toLocaleString()} xp`;
+      return `<span class="banked-xp-page__xp-obtainable">${Math.round(xp).toLocaleString()} xp</span>`;
     }
-    return `${Math.round(effectiveXp).toLocaleString()} xp <span class="banked-xp-page__xp-full">(${Math.round(
+    const obtainable = `<span class="banked-xp-page__xp-obtainable">${Math.round(
+      effectiveXp
+    ).toLocaleString()} xp <span class="banked-xp-page__xp-label">obtainable</span></span>`;
+    const potential = `<span class="banked-xp-page__xp-potential">${Math.round(
       xp
-    ).toLocaleString()} full)</span>`;
+    ).toLocaleString()} xp <span class="banked-xp-page__xp-label">potential</span></span>`;
+    return `${obtainable}${potential}`;
   }
 
   handleListClick(event) {
