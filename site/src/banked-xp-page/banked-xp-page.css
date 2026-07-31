@@ -18,13 +18,34 @@ banked-xp-page {
 .banked-xp-page__list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 24px;
   margin-top: 16px;
 }
 
 .banked-xp-page__empty {
   opacity: 0.7;
   padding: 12px 0;
+}
+
+.banked-xp-page__member-name {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 4px;
+  margin: 0 0 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.banked-xp-page__member-total {
+  color: var(--orange);
+  font-weight: bold;
+  font-size: 0.85em;
+}
+
+.banked-xp-page__skills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .banked-xp-page__skill-head {
@@ -91,4 +112,38 @@ banked-xp-page {
 .banked-xp-page__item-xp {
   min-width: 90px;
   text-align: right;
+  white-space: nowrap;
+}
+
+.banked-xp-page__xp-full {
+  opacity: 0.6;
+  font-size: 0.85em;
+}
+
+.banked-xp-page__secondaries {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.banked-xp-page__secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.banked-xp-page__secondary--short {
+  background: rgba(200, 60, 60, 0.25);
+  color: #ff8a8a;
+}
+
+.banked-xp-page__secondary-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }

@@ -20,68 +20,67 @@ export class BankedXpPage extends BaseElement {
     this.expanded = new Set();
     this.members = [];
 
-    this.playerFilter = this.querySelector(".banked-xp-page__player-filter");
     this.list = this.querySelector(".banked-xp-page__list");
 
-    this.eventListener(this.playerFilter, "change", this.renderList.bind(this));
     this.eventListener(this.list, "click", this.handleListClick.bind(this));
     this.eventListener(this.list, "change", this.handleActivityChange.bind(this));
 
     this.subscribe("members-updated", this.handleUpdatedMembers.bind(this));
-    this.subscribe("banked-xp-selection-updated", this.renderList.bind(this));
+    this.subscribe("banked-xp-selection-updated", this.renderAll.bind(this));
 
-    BankedXp.loadData().then(this.renderList.bind(this));
+    BankedXp.loadData().then(this.renderAll.bind(this));
   }
 
   handleUpdatedMembers(members) {
     this.members = members.filter((member) => member.name !== "@SHARED");
-    const selected = this.playerFilter.value;
-
-    this.playerFilter.innerHTML = this.members
-      .map(
-        (member) =>
-          `<option value="${member.name}" ${member.name === selected ? "selected" : ""}>${member.name}</option>`
-      )
-      .join("");
-
-    if (this.playerFilter.value !== selected) {
-      this.playerFilter.dispatchEvent(new Event("change"));
-    } else {
-      this.renderList();
-    }
+    this.renderAll();
   }
 
-  get selectedMember() {
-    return this.members.find((member) => member.name === this.playerFilter.value);
-  }
-
-  renderList() {
-    const member = this.selectedMember;
-    if (!BankedXp.data || !member) {
+  renderAll() {
+    if (!BankedXp.data || this.members.length === 0) {
       this.list.innerHTML = `<div class="banked-xp-page__empty">Loading...</div>`;
       return;
     }
 
-    const bySkill = member.computeBankedXp();
-    const skillNames = Object.keys(bySkill).sort((a, b) => bySkill[b].xp - bySkill[a].xp);
-
-    if (skillNames.length === 0) {
-      this.list.innerHTML = `<div class="banked-xp-page__empty">No banked XP items found in this player's bank.</div>`;
-      return;
-    }
-
-    this.list.innerHTML = skillNames.map((skillName) => this.skillRowHtml(skillName, bySkill[skillName])).join("");
+    this.list.innerHTML = this.members.map((member) => this.memberSectionHtml(member)).join("");
   }
 
-  skillRowHtml(skillName, data) {
-    const expanded = this.expanded.has(skillName);
-    const items = [...data.items].sort((a, b) => b.xp - a.xp);
+  memberSectionHtml(member) {
+    const bySkill = member.computeBankedXp();
+    const skillNames = Object.keys(bySkill).sort((a, b) => bySkill[b].effectiveXp - bySkill[a].effectiveXp);
+
+    if (skillNames.length === 0) {
+      return `
+<div class="banked-xp-page__member" data-member="${member.name}">
+  <h3 class="banked-xp-page__member-name">${member.name}</h3>
+  <div class="banked-xp-page__empty">No banked XP items found in this player's bank.</div>
+</div>`;
+    }
+
+    const totalXp = skillNames.reduce((sum, name) => sum + bySkill[name].xp, 0);
+    const totalEffectiveXp = skillNames.reduce((sum, name) => sum + bySkill[name].effectiveXp, 0);
+
+    return `
+<div class="banked-xp-page__member" data-member="${member.name}">
+  <h3 class="banked-xp-page__member-name">
+    ${member.name}
+    <span class="banked-xp-page__member-total">${BankedXpPage.xpDisplayHtml(totalXp, totalEffectiveXp)}</span>
+  </h3>
+  <div class="banked-xp-page__skills">
+    ${skillNames.map((skillName) => this.skillRowHtml(member.name, skillName, bySkill[skillName])).join("")}
+  </div>
+</div>`;
+  }
+
+  skillRowHtml(memberName, skillName, data) {
+    const expanded = this.expanded.has(`${memberName}:${skillName}`);
+    const items = [...data.items].sort((a, b) => b.effectiveXp - a.effectiveXp);
     return `
 <div class="banked-xp-page__skill rsborder-tiny rsbackground" data-skill="${skillName}">
   <button type="button" class="banked-xp-page__skill-head">
     <img class="banked-xp-page__skill-icon" src="${Skill.getIcon(skillName)}" alt="" />
     <span class="banked-xp-page__skill-name">${skillName}</span>
-    <span class="banked-xp-page__skill-xp">${Math.round(data.xp).toLocaleString()} xp</span>
+    <span class="banked-xp-page__skill-xp">${BankedXpPage.xpDisplayHtml(data.xp, data.effectiveXp)}</span>
   </button>
   <div class="banked-xp-page__items ${expanded ? "" : "banked-xp-page__items--hidden"}">
     ${items.map((item) => this.itemRowHtml(item)).join("")}
@@ -107,21 +106,54 @@ export class BankedXpPage extends BaseElement {
   <img class="banked-xp-page__item-icon" src="${Item.imageUrl(item.itemId, item.quantity)}" alt="" />
   <span class="banked-xp-page__item-name">${Item.itemName(item.itemId)} x${item.quantity.toLocaleString()}</span>
   ${activityControl}
-  <span class="banked-xp-page__item-xp">${Math.round(item.xp).toLocaleString()} xp</span>
+  ${BankedXpPage.secondariesHtml(item)}
+  <span class="banked-xp-page__item-xp">${BankedXpPage.xpDisplayHtml(item.xp, item.effectiveXp)}</span>
 </div>`;
+  }
+
+  static secondariesHtml(item) {
+    if (item.secondaries.length === 0) return "";
+
+    return `<span class="banked-xp-page__secondaries">${item.secondaries
+      .map((secondary) => {
+        const needed = item.quantity * secondary.qty;
+        const short = secondary.have < needed;
+        return `
+<span class="banked-xp-page__secondary ${short ? "banked-xp-page__secondary--short" : ""}" title="${Item.itemName(
+          secondary.itemId
+        )}: have ${Math.floor(secondary.have).toLocaleString()}, need ${Math.ceil(needed).toLocaleString()}">
+  <img class="banked-xp-page__secondary-icon" src="${Item.imageUrl(secondary.itemId, secondary.have)}" alt="" />
+  ${Math.floor(secondary.have).toLocaleString()}/${Math.ceil(needed).toLocaleString()}
+</span>`;
+      })
+      .join("")}</span>`;
+  }
+
+  // Only shows the "full" figure when secondaries actually constrain the
+  // outcome -- an item with no secondary requirement (the common case) just
+  // shows one number instead of the same value twice.
+  static xpDisplayHtml(xp, effectiveXp) {
+    if (Math.round(xp) === Math.round(effectiveXp)) {
+      return `${Math.round(xp).toLocaleString()} xp`;
+    }
+    return `${Math.round(effectiveXp).toLocaleString()} xp <span class="banked-xp-page__xp-full">(${Math.round(
+      xp
+    ).toLocaleString()} full)</span>`;
   }
 
   handleListClick(event) {
     const head = event.target.closest(".banked-xp-page__skill-head");
     if (!head) return;
 
+    const memberName = head.closest(".banked-xp-page__member").dataset.member;
     const skillName = head.closest(".banked-xp-page__skill").dataset.skill;
-    if (this.expanded.has(skillName)) {
-      this.expanded.delete(skillName);
+    const key = `${memberName}:${skillName}`;
+    if (this.expanded.has(key)) {
+      this.expanded.delete(key);
     } else {
-      this.expanded.add(skillName);
+      this.expanded.add(key);
     }
-    this.renderList();
+    this.renderAll();
   }
 
   handleActivityChange(event) {

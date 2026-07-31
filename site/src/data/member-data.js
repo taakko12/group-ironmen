@@ -319,11 +319,36 @@ export class MemberData {
     }
   }
 
+  // How much of a secondary ingredient requirement this member can cover,
+  // pooling bank + inventory + equipment + rune pouch + seed vault (people
+  // often carry secondaries rather than bank them). altItemIds (Crushable --
+  // crushed or uncrushed both count) and doseGroup (ByDose potions --
+  // dose-weighted) are alternate ways the plugin's data expresses the same
+  // "how much do you have" question; see banked-xp-data.js.
+  availableSecondaryQuantity(secondary) {
+    if (secondary.doseGroup) {
+      return secondary.doseGroup.reduce((sum, id, i) => sum + this.totalItemQuantity(id) * (i + 1), 0);
+    }
+    let total = this.totalItemQuantity(secondary.itemId);
+    for (const id of secondary.altItemIds ?? []) total += this.totalItemQuantity(id);
+    return total;
+  }
+
   // Total XP "locked up" in this member's bank if every held item were put
   // toward its (selectable) training activity -- ported from the RuneLite
   // "banked-experience" plugin's data tables. Purely a client-side
   // computation over data the site already fetched (bank contents) plus a
   // static reference file, so calling this costs zero extra server/DB load.
+  //
+  // Alongside the "full" xp figure (assumes unlimited secondary ingredients)
+  // this also computes "effective" xp, capped by how many conversions the
+  // member can actually afford given what they're holding. Each item's
+  // effective xp is computed independently -- if two different bank items
+  // both need the same scarce secondary, this doesn't detect that
+  // competition, so a summed effective total can overstate what's truly
+  // achievable at once. Modeling shared-pool allocation across items would
+  // need a real multi-consumer allocation pass; not worth it unless this
+  // turns out to matter in practice.
   computeBankedXp() {
     const bySkill = {};
     for (const [itemId, quantity] of this.itemQuantities.bank) {
@@ -337,10 +362,28 @@ export class MemberData {
         activities.find((a) => a.id === selectedId) ??
         BankedXp.defaultActivity(activities, (skill) => this.skills?.[skill]?.level ?? 1);
 
+      const secondaries = (activity.secondaries ?? []).map((secondary) => ({
+        ...secondary,
+        have: this.availableSecondaryQuantity(secondary),
+      }));
+      const affordableActions = secondaries.reduce((max, s) => Math.min(max, Math.floor(s.have / s.qty)), quantity);
+
       const xp = activity.xp * quantity;
-      if (!bySkill[activity.skill]) bySkill[activity.skill] = { xp: 0, items: [] };
+      const effectiveXp = activity.xp * affordableActions;
+
+      if (!bySkill[activity.skill]) bySkill[activity.skill] = { xp: 0, effectiveXp: 0, items: [] };
       bySkill[activity.skill].xp += xp;
-      bySkill[activity.skill].items.push({ itemId, quantity, activity, activities, xp });
+      bySkill[activity.skill].effectiveXp += effectiveXp;
+      bySkill[activity.skill].items.push({
+        itemId,
+        quantity,
+        activity,
+        activities,
+        secondaries,
+        affordableActions,
+        xp,
+        effectiveXp,
+      });
     }
     return bySkill;
   }
