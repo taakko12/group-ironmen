@@ -1,5 +1,12 @@
 banked-xp-page {
   display: block;
+  /* Solid colors instead of opacity for "muted" text -- opacity dims
+     against whatever background happens to show through (page texture,
+     row highlight, etc.), which can drop contrast below WCAG AA. These are
+     picked to stay >= 4.5:1 against the page's dark background. */
+  --muted-text: #b9b9b9;
+  --short-bg: #5a1414;
+  --short-text: #ffd0d0;
 }
 
 .banked-xp-page__head {
@@ -11,7 +18,7 @@ banked-xp-page {
 }
 
 .banked-xp-page__hint {
-  opacity: 0.7;
+  color: var(--muted-text);
   font-size: 0.9em;
 }
 
@@ -23,7 +30,7 @@ banked-xp-page {
 }
 
 .banked-xp-page__empty {
-  opacity: 0.7;
+  color: var(--muted-text);
   padding: 12px 0;
 }
 
@@ -87,63 +94,123 @@ banked-xp-page {
   display: none;
 }
 
+/* Fixed columns (not source-order dependent -- each piece is placed by
+   class, so a row with no secondaries just skips that column instead of
+   shifting everything after it) keep icon/name/activity/secondaries/xp
+   aligned into straight vertical lines across every row, instead of each
+   row's native <select> width dragging everything after it out of line. */
 .banked-xp-page__item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(140px, 300px) minmax(180px, 240px) 1fr 120px;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  column-gap: 10px;
+  row-gap: 4px;
+  padding: 6px 0;
+}
+
+.banked-xp-page__item + .banked-xp-page__item {
+  border-top: 1px solid var(--light-border);
 }
 
 .banked-xp-page__item-icon {
+  grid-column: 1;
   width: 20px;
   height: 20px;
   object-fit: contain;
 }
 
 .banked-xp-page__item-name {
-  flex: 1;
-  min-width: 120px;
-}
-
-.banked-xp-page__item-activity-name {
-  opacity: 0.7;
-}
-
-.banked-xp-page__item-xp {
-  min-width: 90px;
-  text-align: right;
+  grid-column: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.banked-xp-page__xp-full {
-  opacity: 0.6;
-  font-size: 0.85em;
+.banked-xp-page__item-activity,
+.banked-xp-page__item-activity-name {
+  grid-column: 3;
+  max-width: 100%;
+}
+
+.banked-xp-page__item-activity-name {
+  color: var(--muted-text);
 }
 
 .banked-xp-page__secondaries {
+  grid-column: 4;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
 
+.banked-xp-page__item-xp {
+  grid-column: 5;
+  min-width: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.banked-xp-page__xp-full {
+  color: var(--muted-text);
+  font-size: 0.85em;
+}
+
 .banked-xp-page__secondary {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 5px;
+  gap: 4px;
+  padding: 2px 6px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--elevated);
   font-size: 0.85em;
   white-space: nowrap;
 }
 
+/* Shortfall is never color-only: solid (not translucent) high-contrast
+   background/text, bold weight, plus a "!" glyph, so it still reads for
+   colorblind users or on a washed-out screen. */
 .banked-xp-page__secondary--short {
-  background: rgba(200, 60, 60, 0.25);
-  color: #ff8a8a;
+  background: var(--short-bg);
+  color: var(--short-text);
+  font-weight: bold;
+}
+
+.banked-xp-page__secondary--short::before {
+  content: "! ";
 }
 
 .banked-xp-page__secondary-icon {
   width: 16px;
   height: 16px;
   object-fit: contain;
+}
+
+@media only screen and (max-width: 900px) {
+  .banked-xp-page__item {
+    grid-template-columns: 24px 1fr;
+    grid-template-areas:
+      "icon name"
+      ". activity"
+      ". secondaries"
+      ". xp";
+  }
+
+  .banked-xp-page__item-name {
+    grid-area: name;
+    white-space: normal;
+  }
+
+  .banked-xp-page__item-activity,
+  .banked-xp-page__item-activity-name {
+    grid-area: activity;
+  }
+
+  .banked-xp-page__secondaries {
+    grid-area: secondaries;
+  }
+
+  .banked-xp-page__item-xp {
+    grid-area: xp;
+    text-align: left;
+  }
 }

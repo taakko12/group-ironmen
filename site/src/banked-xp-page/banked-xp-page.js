@@ -104,7 +104,9 @@ export class BankedXpPage extends BaseElement {
     return `
 <div class="banked-xp-page__item" data-item-id="${item.itemId}">
   <img class="banked-xp-page__item-icon" src="${Item.imageUrl(item.itemId, item.quantity)}" alt="" />
-  <span class="banked-xp-page__item-name">${Item.itemName(item.itemId)} x${item.quantity.toLocaleString()}</span>
+  <span class="banked-xp-page__item-name" title="${Item.itemName(
+    item.itemId
+  )} x${item.quantity.toLocaleString()}">${Item.itemName(item.itemId)} x${item.quantity.toLocaleString()}</span>
   ${activityControl}
   ${BankedXpPage.secondariesHtml(item)}
   <span class="banked-xp-page__item-xp">${BankedXpPage.xpDisplayHtml(item.xp, item.effectiveXp)}</span>
