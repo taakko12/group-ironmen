@@ -105,6 +105,24 @@ banked-xp-page {
   display: none;
 }
 
+.banked-xp-page__modifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--light-border);
+}
+
+.banked-xp-page__modifier {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9em;
+  color: var(--muted-text);
+  cursor: pointer;
+}
+
 /* Fixed columns (not source-order dependent -- each piece is placed by
    class, so a row with no secondaries just skips that column instead of
    shifting everything after it) keep icon/name/activity/secondaries/xp
@@ -112,11 +130,15 @@ banked-xp-page {
    row's native <select> width dragging everything after it out of line. */
 .banked-xp-page__item {
   display: grid;
-  grid-template-columns: 24px minmax(140px, 300px) minmax(180px, 240px) 1fr minmax(150px, 210px);
+  grid-template-columns: 24px minmax(140px, 300px) minmax(180px, 240px) 1fr minmax(150px, 210px) auto;
   align-items: center;
   column-gap: 10px;
   row-gap: 4px;
   padding: 8px 0;
+}
+
+.banked-xp-page__item--ignored {
+  opacity: 0.5;
 }
 
 .banked-xp-page__item + .banked-xp-page__item {
@@ -162,6 +184,22 @@ banked-xp-page {
   gap: 2px;
   min-width: 0;
   white-space: nowrap;
+}
+
+.banked-xp-page__item-ignore {
+  grid-column: 6;
+  background: none;
+  border: 1px solid var(--light-border);
+  border-radius: 4px;
+  color: var(--muted-text);
+  font-size: 0.8em;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.banked-xp-page__item-ignore:hover {
+  color: inherit;
 }
 
 /* Shared by the skill header, item row, and member total (each nested
@@ -234,7 +272,8 @@ banked-xp-page {
       "icon name"
       ". activity"
       ". secondaries"
-      ". xp";
+      ". xp"
+      ". ignore";
   }
 
   .banked-xp-page__item-name {
@@ -254,5 +293,10 @@ banked-xp-page {
   .banked-xp-page__item-xp {
     grid-area: xp;
     align-items: flex-start;
+  }
+
+  .banked-xp-page__item-ignore {
+    grid-area: ignore;
+    justify-self: start;
   }
 }

@@ -3,6 +3,9 @@ import { Item } from "../data/item";
 import { Skill } from "../data/skill";
 import { BankedXp } from "../data/banked-xp-data";
 import { bankedXpSelection } from "../data/banked-xp-selection";
+import { bankedXpIgnored } from "../data/banked-xp-ignored";
+import { BankedXpModifiers } from "../data/banked-xp-modifiers";
+import { bankedXpModifierSelection } from "../data/banked-xp-modifier-selection";
 
 export class BankedXpPage extends BaseElement {
   constructor() {
@@ -27,6 +30,8 @@ export class BankedXpPage extends BaseElement {
 
     this.subscribe("members-updated", this.handleUpdatedMembers.bind(this));
     this.subscribe("banked-xp-selection-updated", this.renderAll.bind(this));
+    this.subscribe("banked-xp-ignored-updated", this.renderAll.bind(this));
+    this.subscribe("banked-xp-modifier-updated", this.renderAll.bind(this));
 
     BankedXp.loadData().then(this.renderAll.bind(this));
   }
@@ -83,8 +88,29 @@ export class BankedXpPage extends BaseElement {
     <span class="banked-xp-page__skill-xp">${BankedXpPage.xpDisplayHtml(data.xp, data.effectiveXp)}</span>
   </button>
   <div class="banked-xp-page__items ${expanded ? "" : "banked-xp-page__items--hidden"}">
+    ${BankedXpPage.modifiersHtml(skillName)}
     ${items.map((item) => this.itemRowHtml(item)).join("")}
   </div>
+</div>`;
+  }
+
+  static modifiersHtml(skillName) {
+    const modifiers = BankedXpModifiers.forSkill(skillName);
+    if (modifiers.length === 0) return "";
+
+    return `
+<div class="banked-xp-page__modifiers">
+  ${modifiers
+    .map(
+      (m) => `
+  <label class="banked-xp-page__modifier">
+    <input type="checkbox" class="banked-xp-page__modifier-toggle" data-modifier-id="${m.id}" ${
+        bankedXpModifierSelection.has(m.id) ? "checked" : ""
+      } />
+    ${m.name} (+${Math.round((m.xpMultiplier - 1) * 1000) / 10}% xp)
+  </label>`
+    )
+    .join("")}
 </div>`;
   }
 
@@ -101,15 +127,25 @@ export class BankedXpPage extends BaseElement {
             .join("")}</select>`
         : `<span class="banked-xp-page__item-activity-name">${item.activity.name}</span>`;
 
+    const nameTitle =
+      item.cascadedQuantity > 0
+        ? `${Item.itemName(
+            item.itemId
+          )}: ${item.bankQuantity.toLocaleString()} banked + ${item.cascadedQuantity.toLocaleString()} from items convertible into this`
+        : `${Item.itemName(item.itemId)} x${item.quantity.toLocaleString()}`;
+
     return `
-<div class="banked-xp-page__item" data-item-id="${item.itemId}">
+<div class="banked-xp-page__item ${item.ignored ? "banked-xp-page__item--ignored" : ""}" data-item-id="${item.itemId}">
   <img class="banked-xp-page__item-icon" src="${Item.imageUrl(item.itemId, item.quantity)}" alt="" />
-  <span class="banked-xp-page__item-name" title="${Item.itemName(
-    item.itemId
-  )} x${item.quantity.toLocaleString()}">${Item.itemName(item.itemId)} x${item.quantity.toLocaleString()}</span>
+  <span class="banked-xp-page__item-name" title="${nameTitle}">${Item.itemName(
+      item.itemId
+    )} x${item.quantity.toLocaleString()}</span>
   ${activityControl}
   ${BankedXpPage.secondariesHtml(item)}
   <span class="banked-xp-page__item-xp">${BankedXpPage.xpDisplayHtml(item.xp, item.effectiveXp)}</span>
+  <button type="button" class="banked-xp-page__item-ignore" title="${
+    item.ignored ? "Include in banked xp totals" : "Exclude from banked xp totals"
+  }">${item.ignored ? "Include" : "Ignore"}</button>
 </div>`;
   }
 
@@ -157,6 +193,13 @@ export class BankedXpPage extends BaseElement {
   }
 
   handleListClick(event) {
+    const ignoreBtn = event.target.closest(".banked-xp-page__item-ignore");
+    if (ignoreBtn) {
+      const itemId = ignoreBtn.closest(".banked-xp-page__item").dataset.itemId;
+      bankedXpIgnored.toggle(itemId);
+      return;
+    }
+
     const head = event.target.closest(".banked-xp-page__skill-head");
     if (!head) return;
 
@@ -172,6 +215,11 @@ export class BankedXpPage extends BaseElement {
   }
 
   handleActivityChange(event) {
+    if (event.target.classList.contains("banked-xp-page__modifier-toggle")) {
+      bankedXpModifierSelection.toggle(event.target.dataset.modifierId);
+      return;
+    }
+
     if (!event.target.classList.contains("banked-xp-page__item-activity")) return;
 
     const itemId = event.target.closest(".banked-xp-page__item").dataset.itemId;

@@ -6,6 +6,9 @@ import { utility } from "../utility";
 import { AchievementDiary } from "./diaries";
 import { BankedXp } from "./banked-xp-data";
 import { bankedXpSelection } from "./banked-xp-selection";
+import { bankedXpIgnored } from "./banked-xp-ignored";
+import { BankedXpModifiers } from "./banked-xp-modifiers";
+import { bankedXpModifierSelection } from "./banked-xp-modifier-selection";
 
 const playerColors = [
   "hsl(41, 100%, 40%)", // yellow
@@ -350,17 +353,57 @@ export class MemberData {
   // need a real multi-consumer allocation pass; not worth it unless this
   // turns out to matter in practice.
   computeBankedXp() {
-    const bySkill = {};
-    for (const [itemId, quantity] of this.itemQuantities.bank) {
-      if (quantity <= 0) continue;
+    // Resolve which activity an item is using, and (if that activity feeds
+    // into another bankable item via linkedItemId) recursively resolve that
+    // target too, even if the member holds none of it directly -- e.g. logs
+    // set to "Regular Plank" should surface a Plank row purely from the
+    // cascaded quantity. Mirrors the plugin's `linkedMap`/`createLinksMap`.
+    const resolved = new Map();
+    const linkedFrom = new Map();
+    const resolveItem = (itemId) => {
+      if (resolved.has(itemId)) return;
 
       const activities = BankedXp.activitiesForItem(itemId);
-      if (activities.length === 0) continue;
+      if (activities.length === 0) return;
 
       const selectedId = bankedXpSelection.get(itemId);
       const activity =
         activities.find((a) => a.id === selectedId) ??
         BankedXp.defaultActivity(activities, (skill) => this.skills?.[skill]?.level ?? 1);
+
+      resolved.set(itemId, { activity, activities });
+
+      if (activity.linkedItemId && !bankedXpIgnored.has(itemId)) {
+        if (!linkedFrom.has(activity.linkedItemId)) linkedFrom.set(activity.linkedItemId, []);
+        linkedFrom.get(activity.linkedItemId).push({ itemId, linkedQty: activity.linkedQty ?? 1 });
+        resolveItem(activity.linkedItemId);
+      }
+    };
+
+    for (const [itemId, quantity] of this.itemQuantities.bank) {
+      if (quantity > 0) resolveItem(itemId);
+    }
+
+    const bankQuantity = (itemId) => this.itemQuantities.bank.get(itemId) || 0;
+
+    // How much of `itemId` is usable once upstream items currently feeding
+    // into it (and whatever feeds into those, recursively) are folded in.
+    // `seen` guards against a cycle in the linkedItemId data turning this
+    // into an infinite loop -- not expected, but cheap to guard.
+    const cascadedQuantity = (itemId, seen = new Set()) => {
+      if (seen.has(itemId)) return 0;
+      seen.add(itemId);
+      return (linkedFrom.get(itemId) ?? []).reduce((sum, source) => {
+        const sourceTotal = bankQuantity(source.itemId) + cascadedQuantity(source.itemId, seen);
+        return sum + sourceTotal * source.linkedQty;
+      }, 0);
+    };
+
+    const bySkill = {};
+    for (const [itemId, { activity, activities }] of resolved) {
+      const cascaded = cascadedQuantity(itemId);
+      const quantity = bankQuantity(itemId) + cascaded;
+      if (quantity <= 0) continue;
 
       const secondaries = (activity.secondaries ?? []).map((secondary) => ({
         ...secondary,
@@ -368,8 +411,16 @@ export class MemberData {
       }));
       const affordableActions = secondaries.reduce((max, s) => Math.min(max, Math.floor(s.have / s.qty)), quantity);
 
-      const xp = activity.xp * quantity;
-      const effectiveXp = activity.xp * affordableActions;
+      const xpRate = BankedXpModifiers.forSkill(activity.skill).reduce(
+        (rate, modifier) => (bankedXpModifierSelection.has(modifier.id) ? rate * modifier.xpMultiplier : rate),
+        activity.xp
+      );
+
+      // Ignored items still show in the list (so they can be un-ignored) but
+      // contribute nothing to the skill total.
+      const ignored = bankedXpIgnored.has(itemId);
+      const xp = ignored ? 0 : xpRate * quantity;
+      const effectiveXp = ignored ? 0 : xpRate * affordableActions;
 
       if (!bySkill[activity.skill]) bySkill[activity.skill] = { xp: 0, effectiveXp: 0, items: [] };
       bySkill[activity.skill].xp += xp;
@@ -377,12 +428,15 @@ export class MemberData {
       bySkill[activity.skill].items.push({
         itemId,
         quantity,
+        bankQuantity: bankQuantity(itemId),
+        cascadedQuantity: cascaded,
         activity,
         activities,
         secondaries,
         affordableActions,
         xp,
         effectiveXp,
+        ignored,
       });
     }
     return bySkill;

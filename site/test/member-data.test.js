@@ -5,6 +5,8 @@ import { Quest } from "../src/data/quest";
 import { pubsub } from "../src/data/pubsub";
 import { BankedXp } from "../src/data/banked-xp-data";
 import { bankedXpSelection } from "../src/data/banked-xp-selection";
+import { bankedXpIgnored } from "../src/data/banked-xp-ignored";
+import { bankedXpModifierSelection } from "../src/data/banked-xp-modifier-selection";
 
 describe("member-data", () => {
   let originalLookupByName;
@@ -16,6 +18,8 @@ describe("member-data", () => {
     };
     BankedXp.data = undefined;
     bankedXpSelection.selections = {};
+    bankedXpIgnored.ignored = new Set();
+    bankedXpModifierSelection.enabled = new Set();
   });
 
   it("publishes parsed collection log payload on collection_log_v2 updates", () => {
@@ -338,6 +342,81 @@ describe("member-data", () => {
 
     // 1 one-dose (1x1) + 2 two-dose (2x2) = 5 doses available.
     expect(bySkill.Herblore.items[0].affordableActions).toBe(5);
+  });
+
+  it("excludes an ignored item from skill totals but still lists it", () => {
+    Item.itemDetails[93] = { id: 93, name: "Grimy marrentill" };
+    BankedXp.data = {
+      93: [{ id: "clean_marrentill", skill: "Herblore", name: "Clean marrentill", level: 1, xp: 3.8 }],
+    };
+    const member = new MemberData("Alice");
+    member.skills = { Herblore: { level: 99 } };
+    member.update({ bank: [{ id: 93, quantity: 10 }] });
+
+    bankedXpIgnored.toggle(93);
+    const bySkill = member.computeBankedXp();
+
+    expect(bySkill.Herblore.xp).toBe(0);
+    expect(bySkill.Herblore.effectiveXp).toBe(0);
+    expect(bySkill.Herblore.items[0].ignored).toBe(true);
+  });
+
+  it("applies an enabled skill xp modifier to both xp and effectiveXp", () => {
+    Item.itemDetails[1521] = { id: 1521, name: "Oak logs" };
+    BankedXp.data = {
+      1521: [{ id: "oak_plank", skill: "Construction", name: "Oak Plank", level: 15, xp: 60 }],
+    };
+    const member = new MemberData("Alice");
+    member.skills = { Construction: { level: 99 } };
+    member.update({ bank: [{ id: 1521, quantity: 10 }] });
+
+    bankedXpModifierSelection.toggle("carpenters_outfit");
+    const bySkill = member.computeBankedXp();
+
+    expect(bySkill.Construction.xp).toBeCloseTo(60 * 1.025 * 10);
+    expect(bySkill.Construction.effectiveXp).toBeCloseTo(60 * 1.025 * 10);
+  });
+
+  it("cascades quantity from an item whose selected activity feeds into another bankable item", () => {
+    Item.itemDetails[1511] = { id: 1511, name: "Logs" };
+    Item.itemDetails[960] = { id: 960, name: "Plank" };
+    BankedXp.data = {
+      1511: [{ id: "regular_plank", skill: "Construction", name: "Regular Plank", level: 1, xp: 0, linkedItemId: 960 }],
+      960: [{ id: "plank_products", skill: "Construction", name: "Regular plank products", level: 1, xp: 29 }],
+    };
+    const member = new MemberData("Alice");
+    member.skills = { Construction: { level: 99 } };
+    member.update({ bank: [{ id: 1511, quantity: 10 }] });
+
+    const bySkill = member.computeBankedXp();
+
+    // Logs contribute 0 xp on their own (Regular Plank is 0xp); the cascaded
+    // 10 logs -> 10 planks show up entirely on the Plank item's row instead,
+    // even though the member holds zero actual planks.
+    expect(bySkill.Construction.xp).toBe(290);
+    const logsItem = bySkill.Construction.items.find((i) => i.itemId === 1511);
+    const plankItem = bySkill.Construction.items.find((i) => i.itemId === 960);
+    expect(logsItem.xp).toBe(0);
+    expect(plankItem.bankQuantity).toBe(0);
+    expect(plankItem.cascadedQuantity).toBe(10);
+    expect(plankItem.xp).toBe(290);
+  });
+
+  it("excludes an ignored item from contributing cascaded quantity downstream", () => {
+    Item.itemDetails[1511] = { id: 1511, name: "Logs" };
+    Item.itemDetails[960] = { id: 960, name: "Plank" };
+    BankedXp.data = {
+      1511: [{ id: "regular_plank", skill: "Construction", name: "Regular Plank", level: 1, xp: 0, linkedItemId: 960 }],
+      960: [{ id: "plank_products", skill: "Construction", name: "Regular plank products", level: 1, xp: 29 }],
+    };
+    const member = new MemberData("Alice");
+    member.skills = { Construction: { level: 99 } };
+    member.update({ bank: [{ id: 1511, quantity: 10 }] });
+
+    bankedXpIgnored.toggle(1511);
+    const bySkill = member.computeBankedXp();
+
+    expect(bySkill.Construction.xp).toBe(0);
   });
 
   it("ignores bank items with no banked-xp data", () => {
