@@ -9,12 +9,28 @@ class Api {
     this.createGroupUrl = `${this.baseUrl}/create-group`;
     this.exampleDataEnabled = false;
     this.enabled = false;
+    // bank/potion storage are only ever rendered by the /items page -- /live
+    // otherwise sends every member's full bank on every connect (and every
+    // reconnect), which was still driving egress well after the polling
+    // fixes. Reconnect (see connectLive()) whenever this flips so the heavy
+    // snapshot is only pulled while that page is actually open.
+    this.heavyDataEnabled = false;
+    pubsub.subscribe("route-activated", this.handleRouteActivated.bind(this));
+  }
+
+  handleRouteActivated(route) {
+    const heavy = route.getAttribute("route-component") === "items-page";
+    if (heavy === this.heavyDataEnabled) return;
+    this.heavyDataEnabled = heavy;
+    if (this.liveSource) this.connectLive();
   }
 
   get liveUrl() {
     // EventSource can't set custom headers, so the token travels as a query
     // param here instead of the Authorization header every other endpoint uses.
-    return `${this.baseUrl}/group/${this.groupName}/live?token=${encodeURIComponent(this.groupToken)}`;
+    return `${this.baseUrl}/group/${this.groupName}/live?token=${encodeURIComponent(this.groupToken)}&heavy=${
+      this.heavyDataEnabled
+    }`;
   }
 
   get getGroupDataUrl() {
@@ -157,6 +173,7 @@ class Api {
   }
 
   connectLive() {
+    if (this.liveSource) this.liveSource.close();
     const source = new EventSource(this.liveUrl);
     this.liveSource = source;
     source.addEventListener("message", (event) => this.handleLiveMessage(event.data));

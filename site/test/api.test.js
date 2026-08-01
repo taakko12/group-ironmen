@@ -33,6 +33,7 @@ describe("api", () => {
     api.groupToken = undefined;
     api.getGroupInterval = undefined;
     api.liveSource = undefined;
+    api.heavyDataEnabled = false;
 
     groupData.members = new Map();
     groupData.groupItems = {};
@@ -70,7 +71,7 @@ describe("api", () => {
     expect(api.groupName).toBe("gim");
     expect(api.groupToken).toBe("token");
     expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0].url).toBe("/api/group/gim/live?token=token");
+    expect(FakeEventSource.instances[0].url).toBe("/api/group/gim/live?token=token&heavy=false");
     expect(api.liveSource).toBe(FakeEventSource.instances[0]);
   });
 
@@ -87,6 +88,38 @@ describe("api", () => {
     expect(publishSpy).toHaveBeenCalledWith("get-group-data");
     expect(api.enabled).toBe(false);
     expect(api.groupName).toBeUndefined();
+  });
+
+  it("reconnects live with heavy=true when the items page becomes active, and back when it leaves", async () => {
+    vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
+    globalThis.fetch.mockResolvedValue({ ok: true });
+    await api.enable("gim", "token");
+    const original = FakeEventSource.instances[0];
+
+    const itemsRoute = { getAttribute: () => "items-page" };
+    api.handleRouteActivated(itemsRoute);
+
+    expect(original.closed).toBe(true);
+    expect(FakeEventSource.instances).toHaveLength(2);
+    expect(FakeEventSource.instances[1].url).toBe("/api/group/gim/live?token=token&heavy=true");
+
+    const dashboardRoute = { getAttribute: () => "dashboard-page" };
+    api.handleRouteActivated(dashboardRoute);
+
+    expect(FakeEventSource.instances).toHaveLength(3);
+    expect(FakeEventSource.instances[2].url).toBe("/api/group/gim/live?token=token&heavy=false");
+  });
+
+  it("does not reconnect live when route-activated fires but the items page isn't newly (in)active", async () => {
+    vi.spyOn(pubsub, "waitForAllEvents").mockResolvedValue();
+    globalThis.fetch.mockResolvedValue({ ok: true });
+    await api.enable("gim", "token");
+
+    const dashboardRoute = { getAttribute: () => "dashboard-page" };
+    api.handleRouteActivated(dashboardRoute);
+    api.handleRouteActivated(dashboardRoute);
+
+    expect(FakeEventSource.instances).toHaveLength(1);
   });
 
   it("disable closes the live connection, clears credentials, and clears group caches", async () => {

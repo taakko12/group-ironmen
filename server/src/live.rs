@@ -6,8 +6,21 @@ use actix_web::{get, web, Error, HttpResponse};
 use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use futures_util::stream::{self, StreamExt};
+use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+
+// bank/potion_storage are only ever rendered by the /items page, same as
+// get-group-data's include_heavy -- default false so the common case (any
+// other page, or a reconnect while on another page) doesn't pull every
+// member's full bank on every connect. The frontend reconnects with
+// heavy=true when the items page becomes active (see api.js's
+// route-activated subscription).
+#[derive(Deserialize)]
+pub struct LiveQuery {
+    #[serde(default)]
+    pub heavy: bool,
+}
 
 fn format_sse_event(kind: &str, members: &[&GroupMember]) -> Option<web::Bytes> {
     if members.is_empty() {
@@ -44,6 +57,7 @@ fn event_for_push(push: &LivePush, group_id: i64) -> Option<web::Bytes> {
 #[get("/live")]
 pub async fn live(
     auth: Authenticated,
+    query: web::Query<LiveQuery>,
     db_pool: web::Data<Pool>,
     live_tx: web::Data<broadcast::Sender<Arc<LivePush>>>,
 ) -> Result<HttpResponse, Error> {
@@ -54,7 +68,8 @@ pub async fn live(
     let initial = {
         let client = db_pool.get().await.map_err(ApiError::PoolError)?;
         let epoch = DateTime::<Utc>::from_timestamp(0, 0).unwrap();
-        db::get_group_data(&client, group_id, &epoch, Some(&epoch)).await?
+        let heavy_cutoff = query.heavy.then_some(epoch);
+        db::get_group_data(&client, group_id, &epoch, heavy_cutoff.as_ref()).await?
     };
     let initial_refs: Vec<&GroupMember> = initial.iter().collect();
     let initial_event =
