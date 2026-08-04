@@ -1525,6 +1525,15 @@ pub async fn poll_bank_pings(client: &Client, group_id: i64) -> Result<Vec<Pendi
     let bank_pings_enabled = get_bank_pings_enabled(client, group_id).await?;
 
     if bank_pings_enabled && !must_bank_items.is_empty() {
+        // The inactivity cutoff is pushed into the WHERE clause (not just
+        // checked in Rust after fetching) so Postgres never sends
+        // equipment/inventory/bank -- the expensive, unbounded columns --
+        // for members who are still actively playing. Polled every 10s
+        // (bot/bankPings.js) but only ~40 minutes of inactivity is
+        // ever actionable, so on any normal group this now returns zero
+        // rows almost all the time instead of every member's full bank on
+        // every poll, which was the dominant source of Supabase egress.
+        let cutoff = Utc::now() - chrono::Duration::minutes(INACTIVE_THRESHOLD_MINUTES);
         let stmt = client
             .prepare_cached(
                 r#"
@@ -1534,15 +1543,18 @@ quests_last_update, inventory_last_update, equipment_last_update, bank_last_upda
 rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
 collection_log_last_update) as last_updated
 FROM groupironman.members WHERE group_id=$1 AND member_name != $2
+AND GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
+quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
+rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
+collection_log_last_update) <= $3
 "#,
             )
             .await?;
         let rows = client
-            .query(&stmt, &[&group_id, &SHARED_MEMBER])
+            .query(&stmt, &[&group_id, &SHARED_MEMBER, &cutoff])
             .await
             .map_err(ApiError::PollBankPingsError)?;
 
-        let now = Utc::now();
         let insert_stmt = client
             .prepare_cached(
                 r#"
@@ -1557,16 +1569,10 @@ WHERE NOT EXISTS (
             .await?;
 
         for row in rows {
-            let last_updated: Option<DateTime<Utc>> = row.try_get("last_updated").ok();
-            let is_inactive = match last_updated {
-                Some(last_updated) => now - last_updated > chrono::Duration::minutes(INACTIVE_THRESHOLD_MINUTES),
-                None => false,
-            };
-            if !is_inactive {
-                continue;
-            }
-            // Safe: is_inactive is only true when last_updated was Some above.
-            let last_updated = last_updated.unwrap();
+            // SQL's GREATEST(...NULL...) is NULL, and `NULL <= $3` is
+            // UNKNOWN (excluded by WHERE), so every row reaching this loop
+            // already has a non-null, past-cutoff last_updated.
+            let last_updated: DateTime<Utc> = row.try_get("last_updated")?;
 
             let member_id: i64 = row.try_get("member_id")?;
             let equipment: Option<Vec<i32>> = row.try_get("equipment").ok();

@@ -31,16 +31,31 @@ fn format_sse_event(kind: &str, members: &[&GroupMember]) -> Option<web::Bytes> 
     Some(web::Bytes::from(format!("data: {}\n\n", body)))
 }
 
-fn event_for_push(push: &LivePush, group_id: i64) -> Option<web::Bytes> {
+// Same heavy-gating as the initial snapshot (see LiveQuery doc comment), but
+// applied to the ongoing delta stream too: a bank/potion_storage change from
+// any member gets broadcast to every connection for that group, so a
+// non-items-page tab left open would otherwise keep receiving full bank
+// blobs for the lifetime of the connection regardless of the `heavy` param
+// it connected with.
+fn event_for_push(push: &LivePush, group_id: i64, heavy: bool) -> Option<web::Bytes> {
     let (kind, members) = match push {
         LivePush::Full(members) => ("full", members),
         LivePush::Delta(members) => ("delta", members),
     };
-    let filtered: Vec<&GroupMember> = members
+    let filtered: Vec<GroupMember> = members
         .iter()
         .filter(|m| m.group_id == Some(group_id))
+        .cloned()
+        .map(|mut m| {
+            if !heavy {
+                m.bank = None;
+                m.potion_storage = None;
+            }
+            m
+        })
         .collect();
-    format_sse_event(kind, &filtered)
+    let refs: Vec<&GroupMember> = filtered.iter().collect();
+    format_sse_event(kind, &refs)
 }
 
 /// Replaces the old poll-every-N-seconds get-group-data loop: the browser
@@ -77,11 +92,12 @@ pub async fn live(
 
     let initial_stream = stream::once(async move { Ok::<_, Error>(initial_event) });
 
+    let heavy = query.heavy;
     let live_stream = stream::unfold(rx, move |mut rx| async move {
         loop {
             match rx.recv().await {
                 Ok(push) => {
-                    if let Some(event) = event_for_push(&push, group_id) {
+                    if let Some(event) = event_for_push(&push, group_id, heavy) {
                         return Some((Ok::<_, Error>(event), rx));
                     }
                     // Nothing relevant to this group in this push; keep waiting.
