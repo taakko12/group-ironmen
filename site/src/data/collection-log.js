@@ -1,4 +1,7 @@
 import { utility } from "../utility";
+import { api } from "./api";
+import { Item } from "./item";
+import { GroupData } from "./group-data";
 
 // NOTE: The collection log has duplicate versions of items on different pages with different
 // items ids for some reason. Not sure how this is counted correctly in the game client, but
@@ -101,12 +104,18 @@ class CollectionLog {
     this.totalUniqueItems = uniqueItems.size - duplicateCollectionLogItems.size;
   }
 
+  // Collection log contents aren't part of the live group-data stream (see
+  // server's live.rs/db.rs) -- they're fetched fresh here instead, only while
+  // this dialog is actually open, since almost nobody has it open at any
+  // given moment.
   async load(groupData) {
     this.playerLogs = new Map();
+    const rawLogs = await api.getCollectionLog();
 
     for (const member of groupData.members.values()) {
       if (member.name === "@SHARED") continue;
-      this.playerLogs.set(member.name, new PlayerLog(member.name, member.collectionLog));
+      const items = Item.parseItemData(GroupData.transformItemsFromStorage(rawLogs[member.name]) ?? []);
+      this.playerLogs.set(member.name, new PlayerLog(member.name, items));
     }
 
     this.playerNames = Array.from(this.playerLogs.keys());

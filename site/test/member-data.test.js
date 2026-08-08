@@ -22,19 +22,15 @@ describe("member-data", () => {
     bankedXpModifierSelection.enabled = new Set();
   });
 
-  it("publishes parsed collection log payload on collection_log_v2 updates", () => {
+  it("ignores collection_log_v2 in live updates (fetched on demand instead, see api.getCollectionLog)", () => {
     const member = new MemberData("Alice");
 
     member.update({
       collection_log_v2: [{ id: 4151, quantity: 2 }],
     });
 
-    const event = pubsub.getMostRecent("collection_log_v2:Alice");
-    expect(event).toBeDefined();
-    expect(event[0]).toBe(member.collectionLog);
-    expect(member.collectionLog).toHaveLength(1);
-    expect(member.collectionLog[0].id).toBe(4151);
-    expect(member.collectionLog[0].quantity).toBe(2);
+    expect(pubsub.getMostRecent("collection_log_v2:Alice")).toBeUndefined();
+    expect(member.collectionLog).toBeUndefined();
   });
 
   it("publishes interacting updates when payload explicitly clears interacting", () => {

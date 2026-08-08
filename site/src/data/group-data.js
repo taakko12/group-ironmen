@@ -405,7 +405,6 @@ const storageFieldTransformers = [
   ["stats", GroupData.transformStatsFromStorage],
   ["coordinates", GroupData.transformCoordinatesFromStorage],
   ["quests", GroupData.transformQuestsFromStorage],
-  ["collection_log_v2", GroupData.transformItemsFromStorage],
   ["potion_storage", GroupData.transformItemsFromStorage],
 ];
 

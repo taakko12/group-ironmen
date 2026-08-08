@@ -668,7 +668,16 @@ pub async fn am_i_in_group(
     Ok(HttpResponse::Ok().finish())
 }
 
+// Fetched on demand when the collection-log dialog opens, rather than riding
+// along on every /live connect and delta (see db::get_collection_log_for_group
+// and live.rs's event_for_push) -- that field alone was a steady chunk of
+// Supabase egress for data almost nobody was looking at in any given moment.
 #[get("/collection-log")]
-pub async fn get_collection_log() -> Result<web::Json<HashMap<String, Vec<i32>>>, Error> {
-    Ok(web::Json(HashMap::new()))
+pub async fn get_collection_log(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<HashMap<String, Vec<i32>>>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let result = db::get_collection_log_for_group(&client, auth.group_id).await?;
+    Ok(web::Json(result))
 }

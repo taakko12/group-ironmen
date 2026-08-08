@@ -74,14 +74,6 @@ const parsedFieldMappings = [
     publishKey: "diaries",
     updatedAttribute: "diaries",
   },
-  {
-    sourceKey: "collection_log_v2",
-    targetKey: "collectionLog",
-    parser: Item.parseItemData,
-    publishKey: "collection_log_v2",
-    publishValueKey: "collectionLog",
-    updatedAttribute: "collection_log_v2",
-  },
 ];
 
 const itemFieldMappings = [

@@ -319,6 +319,11 @@ pub async fn get_group_data(
     // out of the query entirely (not just NULLed) when not requested --
     // that's what actually saves the Postgres->backend egress, since a NULL
     // CASE result still requires reading the column's value to evaluate it.
+    //
+    // collection_log is left out of this query entirely (not even gated) --
+    // it's only ever rendered by the on-demand collection-log dialog, so it
+    // was pure dead weight on every /live connect and every real-time delta.
+    // See get_collection_log_for_group, fetched once when that dialog opens.
     let rows = if let Some(heavy_timestamp) = heavy_timestamp {
         let stmt = client
             .prepare_cached(
@@ -339,7 +344,6 @@ CASE WHEN rune_pouch_last_update >= $1::TIMESTAMPTZ THEN rune_pouch ELSE NULL EN
 CASE WHEN interacting_last_update >= $1::TIMESTAMPTZ THEN interacting ELSE NULL END as interacting,
 CASE WHEN seed_vault_last_update >= $1::TIMESTAMPTZ THEN seed_vault ELSE NULL END as seed_vault,
 CASE WHEN diary_vars_last_update >= $1::TIMESTAMPTZ THEN diary_vars ELSE NULL END as diary_vars,
-CASE WHEN collection_log_last_update >= $1::TIMESTAMPTZ THEN collection_log ELSE NULL END as collection_log,
 CASE WHEN potion_storage_last_update >= $3::TIMESTAMPTZ THEN potion_storage ELSE NULL END as potion_storage
 FROM groupironman.members WHERE group_id=$2
 "#,
@@ -368,8 +372,7 @@ CASE WHEN equipment_last_update >= $1::TIMESTAMPTZ THEN equipment ELSE NULL END 
 CASE WHEN rune_pouch_last_update >= $1::TIMESTAMPTZ THEN rune_pouch ELSE NULL END as rune_pouch,
 CASE WHEN interacting_last_update >= $1::TIMESTAMPTZ THEN interacting ELSE NULL END as interacting,
 CASE WHEN seed_vault_last_update >= $1::TIMESTAMPTZ THEN seed_vault ELSE NULL END as seed_vault,
-CASE WHEN diary_vars_last_update >= $1::TIMESTAMPTZ THEN diary_vars ELSE NULL END as diary_vars,
-CASE WHEN collection_log_last_update >= $1::TIMESTAMPTZ THEN collection_log ELSE NULL END as collection_log
+CASE WHEN diary_vars_last_update >= $1::TIMESTAMPTZ THEN diary_vars ELSE NULL END as diary_vars
 FROM groupironman.members WHERE group_id=$2
 "#,
             )
@@ -404,12 +407,41 @@ FROM groupironman.members WHERE group_id=$2
             diary_vars: row.try_get("diary_vars").ok(),
             shared_bank: Option::None,
             deposited: Option::None,
-            collection_log_v2: row.try_get("collection_log").ok(),
+            // Not selected above -- see get_collection_log_for_group.
+            collection_log_v2: None,
             potion_storage: row.try_get("potion_storage").ok(),
         };
         result.push(group_member);
     }
 
+    Ok(result)
+}
+
+/// Per-member collection log contents for the whole group, fetched only when
+/// the collection-log dialog actually opens (see authed::get_collection_log)
+/// rather than riding along on every /live connect and delta -- unlike
+/// bank/potion_storage this has no relevant "recently changed" cutoff since
+/// it's fetched fresh on demand, so there's no heavy_timestamp gating here.
+pub async fn get_collection_log_for_group(
+    client: &Client,
+    group_id: i64,
+) -> Result<HashMap<String, Vec<i32>>, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            "SELECT member_name, collection_log FROM groupironman.members WHERE group_id=$1 AND collection_log IS NOT NULL",
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GetCollectionLogError)?;
+
+    let mut result = HashMap::new();
+    for row in rows {
+        let member_name: String = row.try_get("member_name")?;
+        let collection_log: Vec<i32> = row.try_get("collection_log")?;
+        result.insert(member_name, collection_log);
+    }
     Ok(result)
 }
 

@@ -109,6 +109,10 @@ class Api {
     return `${this.baseUrl}/captcha-enabled`;
   }
 
+  get collectionLogUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/collection-log`;
+  }
+
   setCredentials(groupName, groupToken) {
     this.groupName = groupName;
     this.groupToken = groupToken;
@@ -471,6 +475,22 @@ class Api {
     });
 
     return response;
+  }
+
+  // Fetched only when the collection-log dialog opens (see collection-log.js's
+  // load()) -- it used to ride along on every /live connect and delta, which
+  // was a steady chunk of egress for data almost nobody was looking at in any
+  // given moment.
+  async getCollectionLog() {
+    if (this.exampleDataEnabled) {
+      return exampleData.getCollectionLog();
+    }
+    const response = await fetch(this.collectionLogUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
   }
 
   async getWomGains(period) {

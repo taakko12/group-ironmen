@@ -60,6 +60,8 @@ pub enum ApiError {
     GetAttachmentUrlsError(tokio_postgres::error::Error),
     #[from(ignore)]
     UpdateAttachmentUrlsError(tokio_postgres::error::Error),
+    #[from(ignore)]
+    GetCollectionLogError(tokio_postgres::error::Error),
     GroupFullError,
     UreqError(ureq::Error),
     GroupMemberValidationError(String),
@@ -116,6 +118,9 @@ impl ResponseError for ApiError {
             }
             ApiError::UpdateAttachmentUrlsError(ref err) => {
                 handle_pg_error(err, "UpdateAttachmentUrlsError")
+            }
+            ApiError::GetCollectionLogError(ref err) => {
+                handle_pg_error(err, "GetCollectionLogError")
             }
             ApiError::DeleteGroupMemberError(ref err) => {
                 handle_pg_error(err, "DeleteGroupMemberError")

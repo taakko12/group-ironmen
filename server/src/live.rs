@@ -37,6 +37,10 @@ fn format_sse_event(kind: &str, members: &[&GroupMember]) -> Option<web::Bytes> 
 // non-items-page tab left open would otherwise keep receiving full bank
 // blobs for the lifetime of the connection regardless of the `heavy` param
 // it connected with.
+//
+// collection_log_v2 is stripped unconditionally (not gated behind `heavy`)
+// -- it's fetched on demand by the collection-log dialog instead (see
+// db::get_collection_log_for_group), so it never needs to ride along here.
 fn event_for_push(push: &LivePush, group_id: i64, heavy: bool) -> Option<web::Bytes> {
     let (kind, members) = match push {
         LivePush::Full(members) => ("full", members),
@@ -51,6 +55,7 @@ fn event_for_push(push: &LivePush, group_id: i64, heavy: bool) -> Option<web::By
                 m.bank = None;
                 m.potion_storage = None;
             }
+            m.collection_log_v2 = None;
             m
         })
         .collect();
