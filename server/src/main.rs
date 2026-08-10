@@ -59,7 +59,12 @@ async fn main() -> std::io::Result<()> {
         create: Some(std::time::Duration::from_secs(5)),
         recycle: Some(std::time::Duration::from_secs(5)),
     };
-    let pool = config.pg.create_pool(None, tls_connector()).unwrap();
+    // Timeouts above require a runtime to schedule against -- Runtime::None
+    // (the default) can't honor them and deadpool errors with NoRuntimeSpecified.
+    let pool = config
+        .pg
+        .create_pool(Some(deadpool_postgres::Runtime::Tokio1), tls_connector())
+        .unwrap();
     env_logger::init_from_env(
         env_logger::Env::new().default_filter_or(config.logger.level.to_string()),
     );
@@ -71,7 +76,10 @@ async fn main() -> std::io::Result<()> {
     unauthed::start_skills_aggregator(pool.clone());
     wom::start_wom_updater(pool.clone());
 
-    let update_batcher_pool = config.pg.create_pool(None, tls_connector()).unwrap();
+    let update_batcher_pool = config
+        .pg
+        .create_pool(Some(deadpool_postgres::Runtime::Tokio1), tls_connector())
+        .unwrap();
     let (tx, rx) = mpsc::channel::<models::GroupMember>(10000);
     let (live_tx, _live_rx) = broadcast::channel::<Arc<models::LivePush>>(1024);
     let update_batcher_live_tx = live_tx.clone();
