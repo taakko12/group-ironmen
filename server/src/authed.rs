@@ -216,9 +216,15 @@ pub async fn update_group_member(
         ArrayFormat::ItemPairs,
     )?;
 
-    match sender.send(group_member_inner).await {
-        Ok(_) => Ok(HttpResponse::Ok().finish()),
-        Err(_) => Ok(HttpResponse::InternalServerError().body("Failed to submit player update")),
+    // Bounded so a stalled batcher (e.g. its Postgres connection stuck) can't
+    // hang this request until Railway's edge timeout kills it with a 502 --
+    // fail fast instead and let the client's normal poll cadence retry.
+    match tokio::time::timeout(std::time::Duration::from_secs(5), sender.send(group_member_inner)).await {
+        Ok(Ok(_)) => Ok(HttpResponse::Ok().finish()),
+        Ok(Err(_)) => Ok(HttpResponse::InternalServerError().body("Failed to submit player update")),
+        Err(_) => {
+            Ok(HttpResponse::ServiceUnavailable().body("Update queue is backed up, try again shortly"))
+        }
     }
 }
 

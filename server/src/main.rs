@@ -48,7 +48,17 @@ async fn main() -> std::io::Result<()> {
         .install_default()
         .expect("failed to install rustls crypto provider");
 
-    let config = Config::from_env().unwrap();
+    let mut config = Config::from_env().unwrap();
+    // deadpool defaults to no timeouts at all, so a stalled/unresponsive
+    // Postgres (e.g. Supabase pooler dropping connections) leaves pool.get()
+    // waiting forever -- the request then hangs until Railway's own 15s edge
+    // timeout kills it with a 502, instead of us returning a clean fast error.
+    let pool_config = config.pg.pool.get_or_insert_with(deadpool_postgres::PoolConfig::default);
+    pool_config.timeouts = deadpool_postgres::Timeouts {
+        wait: Some(std::time::Duration::from_secs(5)),
+        create: Some(std::time::Duration::from_secs(5)),
+        recycle: Some(std::time::Duration::from_secs(5)),
+    };
     let pool = config.pg.create_pool(None, tls_connector()).unwrap();
     env_logger::init_from_env(
         env_logger::Env::new().default_filter_or(config.logger.level.to_string()),
