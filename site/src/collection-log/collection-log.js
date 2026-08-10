@@ -34,9 +34,18 @@ export class CollectionLog extends BaseElement {
   }
 
   async init(groupData) {
-    await collectionLog.initLogInfo();
-    collectionLog.load(groupData);
-    collectionLog.loadPlayer(this.playerName);
+    try {
+      await collectionLog.initLogInfo();
+      await collectionLog.load(groupData);
+      collectionLog.loadPlayer(this.playerName);
+    } catch (err) {
+      // Anything thrown here previously left the loading screen stuck
+      // forever, since nothing after this point ever ran to hide it.
+      console.error("Failed to load collection log", err);
+      loadingScreenManager.hideLoadingScreen();
+      this.close();
+      return;
+    }
     loadingScreenManager.hideLoadingScreen();
 
     this.totalUniqueItems = collectionLog.totalUniqueItems;
