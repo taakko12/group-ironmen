@@ -1,6 +1,10 @@
 use crate::error::ApiError;
-use crate::models::{WomBossGainEntry, WomPlayerGains, WomSkillGainEntry, SHARED_MEMBER};
+use crate::models::{
+    BossKcDatapoint, MemberBossKcData, WomBossGainEntry, WomPlayerGains, WomSkillGainEntry,
+    SHARED_MEMBER,
+};
 use arc_swap::{ArcSwap, ArcSwapAny};
+use chrono::{DateTime, Utc};
 use deadpool_postgres::Pool;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -14,6 +18,25 @@ const WOM_PERIODS: [&str; 4] = ["day", "week", "month", "year"];
 // Spacing between WOM calls during a refresh so a full 5-member x 4-period
 // cycle stays comfortably under WOM's 20 req/60s unauthenticated limit.
 const WOM_CALL_SPACING_MS: u64 = 500;
+
+// WOM's Boss metric enum (https://docs.wiseoldman.net/api/global-type-definitions).
+// Used to validate the `boss` query param before it goes into a WOM URL.
+pub const WOM_BOSS_METRICS: [&str; 71] = [
+    "abyssal_sire", "alchemical_hydra", "amoxliatl", "araxxor", "artio", "barrows_chests",
+    "brutus", "bryophyta", "callisto", "calvarion", "cerberus", "chambers_of_xeric",
+    "chambers_of_xeric_challenge_mode", "chaos_elemental", "chaos_fanatic", "commander_zilyana",
+    "corporeal_beast", "crazy_archaeologist", "dagannoth_prime", "dagannoth_rex",
+    "dagannoth_supreme", "deranged_archaeologist", "doom_of_mokhaiotl", "duke_sucellus",
+    "general_graardor", "giant_mole", "grotesque_guardians", "hespori", "kalphite_queen",
+    "king_black_dragon", "kraken", "kreearra", "kril_tsutsaroth", "lunar_chests", "mad_angel",
+    "maggot_king", "mimic", "nex", "nightmare", "phosanis_nightmare", "obor", "phantom_muspah",
+    "sarachnis", "scorpia", "scurrius", "shellbane_gryphon", "skotizo", "sol_heredit", "spindel",
+    "tempoross", "the_gauntlet", "the_corrupted_gauntlet", "the_hueycoatl", "the_leviathan",
+    "the_royal_titans", "the_whisperer", "theatre_of_blood", "theatre_of_blood_hard_mode",
+    "thermonuclear_smoke_devil", "tombs_of_amascut", "tombs_of_amascut_expert", "tzkal_zuk",
+    "tztok_jad", "vardorvis", "venenatis", "vetion", "vorkath", "wintertodt", "yama", "zalcano",
+    "zulrah",
+];
 
 static WOM_GAINS: LazyLock<ArcSwapAny<Arc<String>>> =
     LazyLock::new(|| ArcSwap::from(Arc::new("{}".to_string())));
@@ -234,6 +257,80 @@ pub async fn update_wom_boss_kc(db_pool: &Pool) -> Result<(), ApiError> {
 pub fn get_cached_wom_boss_kc() -> HashMap<String, HashMap<String, i64>> {
     let raw = WOM_BOSS_KC.load();
     serde_json::from_str(&raw).unwrap_or_default()
+}
+
+#[derive(Deserialize)]
+struct WomTimelineDatapoint {
+    value: i64,
+    date: DateTime<Utc>,
+}
+
+/// Fetches one player's full boss KC history for `boss_metric` over `period`,
+/// via WOM's snapshot timeline endpoint. WOM already keeps every historical
+/// snapshot it's taken of a player, so this reads that directly instead of
+/// us maintaining a duplicate time series in our own database.
+async fn fetch_player_boss_timeline(
+    rsn: &str,
+    boss_metric: &str,
+    period: &str,
+) -> Result<Vec<WomTimelineDatapoint>, ApiError> {
+    let encoded_rsn = rsn.replace(' ', "%20");
+    let url = format!(
+        "{}/players/{}/snapshots/timeline?metric={}&period={}",
+        WOM_BASE_URL, encoded_rsn, boss_metric, period
+    );
+    let user_agent = wom_user_agent();
+
+    task::spawn_blocking(move || {
+        ureq::get(&url)
+            .header("User-Agent", &user_agent)
+            .call()
+            .map_err(ApiError::UreqError)?
+            .body_mut()
+            .read_json::<Vec<WomTimelineDatapoint>>()
+            .map_err(ApiError::UreqError)
+    })
+    .await
+    .unwrap()
+}
+
+// ponytail: fetched fresh on every call, no caching -- fine while boss-graph
+// views are occasional (each view costs member_count WOM calls, spaced to
+// stay under the 20 req/60s limit). If repeated views of the same
+// boss+period start adding up, add a short-lived (~60s) ArcSwap cache here
+// keyed by (boss_metric, period), same pattern as WOM_BOSS_KC above.
+pub async fn fetch_group_boss_timeline(
+    member_names: &[String],
+    boss_metric: &str,
+    period: &str,
+) -> Vec<MemberBossKcData> {
+    let mut result = Vec::with_capacity(member_names.len());
+    for member_name in member_names {
+        match fetch_player_boss_timeline(member_name, boss_metric, period).await {
+            Ok(points) => {
+                result.push(MemberBossKcData {
+                    name: member_name.clone(),
+                    boss_kc_data: points
+                        .into_iter()
+                        .map(|p| BossKcDatapoint {
+                            time: p.date,
+                            kills: p.value,
+                        })
+                        .collect(),
+                });
+            }
+            Err(err) => {
+                log::error!(
+                    "Failed to fetch WOM boss timeline for '{}' ({}): {}",
+                    member_name,
+                    boss_metric,
+                    err
+                );
+            }
+        }
+        time::sleep(Duration::from_millis(WOM_CALL_SPACING_MS)).await;
+    }
+    result
 }
 
 pub async fn update_wom_gains(db_pool: &Pool) -> Result<(), ApiError> {

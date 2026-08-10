@@ -1,0 +1,46 @@
+boss-tracking-page {
+  display: block;
+}
+
+.boss-tracking-page__chart-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  box-sizing: border-box;
+  margin-top: 12px;
+  padding-bottom: 12px;
+}
+
+.boss-tracking-page__control-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.boss-tracking-page__period-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.boss-tracking-page__period-btn.active {
+  background: rgb(66, 55, 38);
+  outline: 1px solid rgb(200, 200, 200);
+}
+
+.boss-tracking-page__boss-input {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 6px 10px;
+  min-width: 14em;
+}
+
+.boss-tracking-page__boss-input:focus {
+  outline: none;
+}
+
+.boss-tracking-page__loader {
+  position: absolute;
+}

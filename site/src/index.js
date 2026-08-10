@@ -41,6 +41,8 @@ import "./stat-bar/stat-bar.js";
 import "./player-interacting/player-interacting.js";
 import "./skills-graphs/skills-graphs.js";
 import "./skill-graph/skill-graph.js";
+import "./boss-tracking-page/boss-tracking-page.js";
+import "./boss-graph/boss-graph.js";
 import "./loot-page/loot-page.js";
 import "./death-page/death-page.js";
 import "./dashboard-page/dashboard-page.js";

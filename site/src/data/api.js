@@ -85,6 +85,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/wom-gains`;
   }
 
+  get womBossKcTimelineUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/wom-boss-kc-timeline`;
+  }
+
   get amILoggedInUrl() {
     return `${this.baseUrl}/group/${this.groupName}/am-i-logged-in`;
   }
@@ -495,6 +499,15 @@ class Api {
 
   async getWomGains(period) {
     const response = await fetch(`${this.womGainsUrl}?period=${period}`, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
+  }
+
+  async getWomBossKcTimeline(boss, period) {
+    const response = await fetch(`${this.womBossKcTimelineUrl}?boss=${boss}&period=${period}`, {
       headers: {
         Authorization: this.groupToken,
       },

@@ -1,0 +1,124 @@
+boss-graph {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.boss-graph__container {
+  position: relative;
+  height: max(40vh, 300px);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.boss-graph__member-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 0.75em 2em 0 2em;
+}
+
+.boss-graph__member-filter label {
+  display: flex;
+  align-items: center;
+}
+
+.boss-graph__member-filter-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 2px;
+}
+
+.boss-graph__member-filters button {
+  margin-left: auto;
+}
+
+.boss-graph__member-filters button + button {
+  margin-left: 8px;
+}
+
+.boss-graph__table-container {
+  padding: 1em 2em 0 2em;
+}
+
+.boss-graph__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75em;
+  padding: 0 0 0.75em 0;
+  font-size: 18px;
+  color: var(--secondary-text, #b0b0b0);
+}
+
+.boss-graph__summary span {
+  min-width: 0;
+  padding-right: 0.75em;
+  border-right: 1px solid var(--graph-grid-border);
+}
+
+.boss-graph__summary span:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+
+.boss-graph__table-scroll {
+  overflow-x: auto;
+}
+
+.boss-graph__table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 20px;
+}
+
+.boss-graph__table-container th {
+  text-align: left;
+  padding: 4px 8px;
+  font-size: 16px;
+  font-weight: normal;
+  color: var(--secondary-text, #b0b0b0);
+  border-bottom: 1px solid var(--graph-grid-border);
+}
+
+.boss-graph__table-container th:nth-child(n + 3),
+.boss-graph__table-container td:nth-child(n + 3) {
+  text-align: right;
+}
+
+.boss-graph__rank-header {
+  width: 2em;
+  text-align: center;
+}
+
+.boss-graph__rank {
+  text-align: center;
+  color: var(--secondary-text, #b0b0b0);
+}
+
+.boss-graph__table-container tr {
+  border-bottom: 1px solid var(--graph-grid-border);
+}
+
+.boss-graph__table-container tr:hover {
+  border-bottom: 1px solid white;
+}
+
+.boss-graph__table-container td {
+  padding: 4px 8px;
+}
+
+.boss-graph__player-cell {
+  display: flex;
+  align-items: center;
+}
+
+.boss-graph__player-dot {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  margin-right: 0.5em;
+}

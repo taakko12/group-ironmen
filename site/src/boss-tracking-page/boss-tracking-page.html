@@ -1,0 +1,25 @@
+<div class="boss-tracking-page__control-container">
+  <button class="boss-tracking-page__refresh men-button">Refresh</button>
+
+  <div class="boss-tracking-page__period-toggle">
+    <button type="button" class="men-button small boss-tracking-page__period-btn active" data-period="Day">24H</button>
+    <button type="button" class="men-button small boss-tracking-page__period-btn" data-period="Week">7D</button>
+    <button type="button" class="men-button small boss-tracking-page__period-btn" data-period="Month">30D</button>
+    <button type="button" class="men-button small boss-tracking-page__period-btn" data-period="Year">1Y</button>
+  </div>
+
+  <div class="men-control-container rsborder-tiny rsbackground rsbackground-hover">
+    <input
+      class="boss-tracking-page__boss-input"
+      list="boss-tracking-page__boss-list"
+      placeholder="Search bosses..."
+      autocomplete="off"
+    />
+    <datalist id="boss-tracking-page__boss-list">
+      ${BOSSES.map((boss) => `
+      <option value="${boss.name}"></option>
+      `).join('')}
+    </datalist>
+  </div>
+</div>
+<div class="boss-tracking-page__chart-container rsborder rsbackground"></div>

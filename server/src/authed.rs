@@ -5,9 +5,9 @@ use crate::models::{
     AddGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData, GroupGoals,
     GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, LivePush, MustBankItem,
     NameChange, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPings,
-    RenameGroupMember, RequestBank, RequestBankBatch, SetBankPingsEnabled, SetGoalDone,
-    SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls, WomPlayerGains,
-    SHARED_MEMBER,
+    MemberBossKcData, RenameGroupMember, RequestBank, RequestBankBatch, SetBankPingsEnabled,
+    SetGoalDone, SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls,
+    WomPlayerGains, SHARED_MEMBER,
 };
 use crate::validators::{valid_hex_color, valid_name, validate_member_prop_length, ArrayFormat};
 use crate::wom;
@@ -361,6 +361,35 @@ pub async fn get_wom_boss_kc(
     }
 
     Ok(web::Json(result))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetWomBossKcTimelineQuery {
+    pub boss: String,
+    pub period: SkillDataPeriod,
+}
+#[get("/wom-boss-kc-timeline")]
+pub async fn get_wom_boss_kc_timeline(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+    query: web::Query<GetWomBossKcTimelineQuery>,
+) -> Result<web::Json<Vec<MemberBossKcData>>, Error> {
+    if !wom::WOM_BOSS_METRICS.contains(&query.boss.as_str()) {
+        return Err(ApiError::GroupMemberValidationError(format!("Unknown boss: {}", query.boss)).into());
+    }
+    let period = match query.period {
+        SkillDataPeriod::Day => "day",
+        SkillDataPeriod::Week => "week",
+        SkillDataPeriod::Month => "month",
+        SkillDataPeriod::Year => "year",
+    };
+
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let member_names = db::get_group_member_names(&client, auth.group_id).await?;
+
+    let group_boss_data = wom::fetch_group_boss_timeline(&member_names, &query.boss, period).await;
+    Ok(web::Json(group_boss_data))
 }
 
 #[post("/name-changes")]

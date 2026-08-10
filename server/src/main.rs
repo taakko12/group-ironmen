@@ -130,6 +130,7 @@ async fn main() -> std::io::Result<()> {
             .service(authed::add_name_change)
             .service(authed::get_wom_gains)
             .service(authed::get_wom_boss_kc)
+            .service(authed::get_wom_boss_kc_timeline)
             .service(authed::get_collection_log)
             .service(live::live);
         let json_config = web::JsonConfig::default().limit(100000);

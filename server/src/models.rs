@@ -404,3 +404,14 @@ pub struct WomPlayerGains {
     pub skills_gained: Vec<WomSkillGainEntry>,
     pub bosses_gained: Vec<WomBossGainEntry>,
 }
+
+#[derive(Serialize)]
+pub struct BossKcDatapoint {
+    pub time: DateTime<Utc>,
+    pub kills: i64,
+}
+#[derive(Serialize)]
+pub struct MemberBossKcData {
+    pub name: String,
+    pub boss_kc_data: Vec<BossKcDatapoint>,
+}
