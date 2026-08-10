@@ -31,6 +31,8 @@ export class BossTrackingPage extends BaseElement {
     });
     this.eventListener(this.refreshButton, "click", this.handleRefreshClicked.bind(this));
     this.eventListener(this.bossInput, "change", this.handleBossInputChange.bind(this));
+    this.eventListener(this.bossInput, "focus", this.handleBossInputFocus.bind(this));
+    this.eventListener(this.bossInput, "blur", this.handleBossInputBlur.bind(this));
 
     this.subscribeOnce("get-group-data", this.createChart.bind(this));
   }
@@ -48,6 +50,21 @@ export class BossTrackingPage extends BaseElement {
     }
     this.selectedBossMetric = metric;
     this.subscribeOnce("get-group-data", this.createChart.bind(this));
+  }
+
+  // A native datalist filters its suggestions against whatever's already in
+  // the input -- since the field starts pre-filled with the current
+  // selection, clicking the dropdown arrow without clearing it first only
+  // ever matches that one entry. Clearing on focus makes it show the full
+  // list; blur restores the last valid pick if nothing new was chosen.
+  handleBossInputFocus() {
+    this.bossInput.value = "";
+  }
+
+  handleBossInputBlur() {
+    if (!bossNameToMetric.has(this.bossInput.value)) {
+      this.bossInput.value = labelForBoss(this.selectedBossMetric);
+    }
   }
 
   handlePeriodChange(event) {
