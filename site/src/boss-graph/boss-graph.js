@@ -1,7 +1,6 @@
 /* global Chart */
 import { BaseElement } from "../base-element/base-element";
 import { utility } from "../utility";
-import { bossDisplayName } from "../data/boss";
 
 // Same fixed bucket grid as skill-graph -- lets multiple members' irregular
 // WOM snapshot timestamps line up on one shared x-axis.
@@ -17,7 +16,7 @@ export class BossGraph extends BaseElement {
   connectedCallback() {
     super.connectedCallback();
     this.period = this.getAttribute("data-period");
-    this.bossMetric = this.getAttribute("boss-metric");
+    this.bossLabel = this.getAttribute("boss-label");
     this.render();
     this.tableContainer = this.querySelector(".boss-graph__table-container");
     this.memberFiltersContainer = this.querySelector(".boss-graph__member-filters");
@@ -113,7 +112,7 @@ export class BossGraph extends BaseElement {
   createMemberFilters(dataSets) {
     const filters = dataSets
       .map((dataSet, index) => {
-        const id = `boss-graph-member-filter-${this.bossMetric}-${index}`;
+        const id = `boss-graph-member-filter-${this.bossLabel}-${index}`;
         return `
 <span class="boss-graph__member-filter">
   <input type="checkbox" id="${id}" data-dataset-index="${index}" checked />
@@ -210,7 +209,7 @@ ${filters}
           },
           title: {
             display: true,
-            text: `${bossDisplayName(this.bossMetric)} - ${this.period}`,
+            text: `${this.bossLabel} - ${this.period}`,
             font: {
               size: 18,
               family: "rsbold, ui-sans-serif, Arial, sans-serif",
@@ -235,15 +234,18 @@ ${filters}
 
   dataSets() {
     let result = [];
-    for (let i = 0; i < this.groupBossData.length; ++i) {
-      const memberBossData = this.groupBossData[i];
-      const [kcData, changeData, cumulativeChangeData] = this.dataForPlayer(memberBossData);
-      const member = this.currentGroupData.members.get(memberBossData.name);
+    // Member list comes from whichever metric's response is present -- all
+    // metrics in a pair are fetched for the same group, so any one of them
+    // has the full member list.
+    const memberNames = this.groupBossDataSets.find((data) => data.length > 0)?.map((m) => m.name) ?? [];
+    for (const name of memberNames) {
+      const [kcData, changeData, cumulativeChangeData] = this.dataForPlayer(name);
+      const member = this.currentGroupData.members.get(name);
       const color = member ? member.color : "#888";
 
       result.push({
         type: "line",
-        label: memberBossData.name,
+        label: name,
         data: cumulativeChangeData,
         borderColor: color,
         backgroundColor: utility.colorWithAlpha(color, 0.12),
@@ -263,8 +265,24 @@ ${filters}
     return result;
   }
 
-  dataForPlayer(memberBossData) {
-    const completeTimeSeries = this.generateCompleteTimeSeries(memberBossData.boss_kc_data);
+  // Bucketed separately per metric (each has its own independent running
+  // KC), then summed bucket-by-bucket -- this is what actually combines a
+  // paired boss (e.g. Nightmare + Phosani's Nightmare) into one KC line.
+  dataForPlayer(name) {
+    const perMetricSeries = this.groupBossDataSets.map((metricData) => {
+      const memberData = metricData.find((m) => m.name === name);
+      return this.generateCompleteTimeSeries(memberData ? memberData.boss_kc_data : []);
+    });
+
+    const completeTimeSeries = this.dates.map((_, i) => {
+      let sum;
+      for (const series of perMetricSeries) {
+        if (series[i] === undefined) continue;
+        sum = (sum ?? 0) + series[i];
+      }
+      return sum;
+    });
+
     const changeData = [0];
     const cumulativeChangeData = [0];
 

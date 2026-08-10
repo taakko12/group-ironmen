@@ -81,8 +81,33 @@ function bossDisplayName(metric) {
     .join(" ");
 }
 
-const BOSSES = BOSS_METRICS.map((metric) => ({ metric, name: bossDisplayName(metric) })).sort((a, b) =>
-  a.name.localeCompare(b.name)
-);
+// Same fight, just a harder/expert-mode variant -- WOM tracks these as
+// separate metrics, but picking the base boss here combines both into one
+// KC line instead of making you track the variant separately. Keyed by the
+// metric that represents the pair in the boss picker; the array is every
+// WOM metric whose KC gets summed together.
+const BOSS_PAIRS = {
+  nightmare: ["nightmare", "phosanis_nightmare"],
+  chambers_of_xeric: ["chambers_of_xeric", "chambers_of_xeric_challenge_mode"],
+  theatre_of_blood: ["theatre_of_blood", "theatre_of_blood_hard_mode"],
+  tombs_of_amascut: ["tombs_of_amascut", "tombs_of_amascut_expert"],
+  the_gauntlet: ["the_gauntlet", "the_corrupted_gauntlet"],
+};
+// The non-primary half of each pair (e.g. phosanis_nightmare) is dropped
+// from the picker below -- selecting the primary already includes it.
+const secondaryPairedMetrics = new Set(Object.values(BOSS_PAIRS).flatMap((group) => group.slice(1)));
 
-export { BOSS_METRICS, BOSSES, bossDisplayName };
+function metricsForBoss(metric) {
+  return BOSS_PAIRS[metric] ?? [metric];
+}
+
+function labelForBoss(metric) {
+  const group = BOSS_PAIRS[metric];
+  return group ? group.map(bossDisplayName).join(" + ") : bossDisplayName(metric);
+}
+
+const BOSSES = BOSS_METRICS.filter((metric) => !secondaryPairedMetrics.has(metric))
+  .map((metric) => ({ metric, name: labelForBoss(metric) }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+export { BOSS_METRICS, BOSSES, bossDisplayName, metricsForBoss, labelForBoss };

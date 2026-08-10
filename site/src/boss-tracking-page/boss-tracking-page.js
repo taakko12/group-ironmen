@@ -1,7 +1,7 @@
 /* global Chart */
 import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
-import { BOSSES } from "../data/boss";
+import { BOSSES, metricsForBoss, labelForBoss } from "../data/boss";
 
 const bossNameToMetric = new Map(BOSSES.map((boss) => [boss.name, boss.metric]));
 
@@ -69,8 +69,9 @@ export class BossTrackingPage extends BaseElement {
     this.chartContainer.appendChild(loader);
 
     try {
-      const [groupBossData] = await Promise.all([
-        api.getWomBossKcTimeline(this.selectedBossMetric, this.period),
+      const metrics = metricsForBoss(this.selectedBossMetric);
+      const [groupBossDataSets] = await Promise.all([
+        Promise.all(metrics.map((metric) => api.getWomBossKcTimeline(metric, this.period))),
         this.waitForChartjs(),
       ]);
 
@@ -81,9 +82,9 @@ export class BossTrackingPage extends BaseElement {
       Chart.defaults.scale.grid.color = style.getPropertyValue("--graph-grid-border");
 
       const bossGraph = document.createElement("boss-graph");
-      bossGraph.groupBossData = groupBossData;
+      bossGraph.groupBossDataSets = groupBossDataSets;
       bossGraph.setAttribute("data-period", this.period);
-      bossGraph.setAttribute("boss-metric", this.selectedBossMetric);
+      bossGraph.setAttribute("boss-label", labelForBoss(this.selectedBossMetric));
       this.chartContainer.appendChild(bossGraph);
     } catch (err) {
       console.error(err);
