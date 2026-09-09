@@ -117,6 +117,8 @@ fn make_member(group_id: Option<i64>, name: &str) -> GroupMember {
         collection_log_v2: None,
         potion_storage: None,
         last_updated: None,
+        discord_id: None,
+        color: None,
     }
 }
 
@@ -359,7 +361,15 @@ async fn test_all_field_types_round_trip() {
     assert_eq!(alice.rune_pouch, Some(vec![5; 8]));
     assert_eq!(alice.seed_vault, Some(vec![7, 14, 21, 28]));
     assert_eq!(alice.diary_vars, Some(vec![1; 62]));
-    assert_eq!(alice.collection_log_v2, Some(vec![100, 200, 300]));
+    // collection_log is deliberately not selected by get_group_data -- it
+    // rode along on every /live connect and delta for data almost nobody was
+    // looking at, so it moved to an on-demand fetch instead. It still has to
+    // round-trip through the batcher's write path, just via that fetch.
+    assert_eq!(alice.collection_log_v2, None);
+    let collection_logs = db::get_collection_log_for_group(&client, group_id)
+        .await
+        .expect("failed to fetch collection logs");
+    assert_eq!(collection_logs.get("alice"), Some(&vec![100, 200, 300]));
     assert_eq!(alice.potion_storage, Some(vec![101, 4, 102, 2]));
     assert!(alice.interacting.is_some(), "interacting should be set");
     let interacting_json = serde_json::to_string(&alice.interacting.unwrap()).unwrap();
@@ -1130,4 +1140,168 @@ async fn test_potion_storage_idempotent_resend() {
     );
 
     drop(tx);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Integration tests: offline bank-ping queueing (db::poll_bank_pings)
+//
+// poll_bank_pings does its whole "who's offline holding a tagged item" scan
+// inside one INSERT..SELECT so the item columns never cross the wire. That
+// query is the only place the `[id, qty, id, qty, ...]` encoding is decoded
+// in SQL rather than Rust, so it gets covered here against a real Postgres.
+// ──────────────────────────────────────────────────────────────────────────
+
+/// Backdates the group's activity past INACTIVE_THRESHOLD_MINUTES so every
+/// member reads as offline, which is what makes them ping-eligible.
+///
+/// Every column feeding the query's GREATEST(...) has to move, not just one:
+/// writing an item column fires that column's set_*_timestamp trigger (see
+/// db.rs's update_{col}_timestamp), so seeding a bank/inventory leaves a
+/// fresh NOW() behind that would otherwise keep the member looking online.
+/// Must therefore be called *after* any seeding the test does.
+async fn mark_group_inactive(client: &Object, group_id: i64) {
+    client
+        .execute(
+            r#"UPDATE groupironman.members SET
+                stats_last_update = NOW() - INTERVAL '2 hours',
+                coordinates_last_update = NOW() - INTERVAL '2 hours',
+                skills_last_update = NOW() - INTERVAL '2 hours',
+                quests_last_update = NOW() - INTERVAL '2 hours',
+                inventory_last_update = NOW() - INTERVAL '2 hours',
+                equipment_last_update = NOW() - INTERVAL '2 hours',
+                bank_last_update = NOW() - INTERVAL '2 hours',
+                rune_pouch_last_update = NOW() - INTERVAL '2 hours',
+                interacting_last_update = NOW() - INTERVAL '2 hours',
+                seed_vault_last_update = NOW() - INTERVAL '2 hours',
+                diary_vars_last_update = NOW() - INTERVAL '2 hours',
+                collection_log_last_update = NOW() - INTERVAL '2 hours'
+               WHERE group_id = $1"#,
+            &[&group_id],
+        )
+        .await
+        .expect("failed to backdate member activity");
+}
+
+#[tokio::test]
+async fn test_offline_bank_ping_queued_once_for_held_item() {
+    let _guard = TEST_MUTEX.lock().await;
+    let pool = create_test_pool().await;
+    let group_id = setup_test_group(&pool).await;
+    let client = pool.get().await.expect("failed to get client");
+
+    // alice holds the tagged item in both her bank (3) and inventory (2);
+    // bob holds only an untagged item, so he must not be pinged.
+    client
+        .execute(
+            "UPDATE groupironman.members SET bank = $2, inventory = $3 WHERE group_id = $1 AND member_name = 'alice'",
+            &[&group_id, &vec![42i32, 3i32], &vec![42i32, 2i32]],
+        )
+        .await
+        .expect("failed to seed alice");
+    client
+        .execute(
+            "UPDATE groupironman.members SET bank = $2 WHERE group_id = $1 AND member_name = 'bob'",
+            &[&group_id, &vec![7i32, 1i32]],
+        )
+        .await
+        .expect("failed to seed bob");
+
+    db::add_must_bank_item(&client, group_id, 42)
+        .await
+        .expect("failed to tag must-bank item");
+    mark_group_inactive(&client, group_id).await;
+
+    let pings = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("first poll failed");
+
+    assert_eq!(pings.len(), 1, "only alice holds the tagged item");
+    assert_eq!(pings[0].member_name, "alice");
+    assert_eq!(pings[0].item_id, 42);
+    assert_eq!(pings[0].reason, "offline");
+    // Quantity is summed across equipment + inventory + bank.
+    assert_eq!(pings[0].quantity, 5);
+
+    // Still offline holding the same item: the existing ping already covers
+    // this stretch, so a re-poll must not queue a duplicate.
+    let again = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("second poll failed");
+    assert!(
+        again.is_empty(),
+        "offline ping should not repeat while the member is still offline"
+    );
+}
+
+#[tokio::test]
+async fn test_offline_bank_ping_skipped_when_disabled_or_untagged() {
+    let _guard = TEST_MUTEX.lock().await;
+    let pool = create_test_pool().await;
+    let group_id = setup_test_group(&pool).await;
+    let client = pool.get().await.expect("failed to get client");
+
+    client
+        .execute(
+            "UPDATE groupironman.members SET bank = $2 WHERE group_id = $1 AND member_name = 'alice'",
+            &[&group_id, &vec![42i32, 3i32]],
+        )
+        .await
+        .expect("failed to seed alice");
+    mark_group_inactive(&client, group_id).await;
+
+    // Nothing tagged yet -- holding items is not on its own pingable.
+    let pings = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("poll with no tagged items failed");
+    assert!(pings.is_empty(), "no must-bank items means no pings");
+
+    // Tagged, but the group has offline pings switched off.
+    db::add_must_bank_item(&client, group_id, 42)
+        .await
+        .expect("failed to tag must-bank item");
+    db::set_bank_pings_enabled(&client, group_id, false)
+        .await
+        .expect("failed to disable bank pings");
+
+    let pings = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("poll with pings disabled failed");
+    assert!(pings.is_empty(), "disabled groups must not queue offline pings");
+
+    // Re-enabling picks it up, proving the toggle is what gated it.
+    db::set_bank_pings_enabled(&client, group_id, true)
+        .await
+        .expect("failed to re-enable bank pings");
+    let pings = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("poll after re-enabling failed");
+    assert_eq!(pings.len(), 1, "re-enabling should queue the pending ping");
+    assert_eq!(pings[0].item_id, 42);
+}
+
+#[tokio::test]
+async fn test_active_member_holding_tagged_item_is_not_pinged() {
+    let _guard = TEST_MUTEX.lock().await;
+    let pool = create_test_pool().await;
+    let group_id = setup_test_group(&pool).await;
+    let client = pool.get().await.expect("failed to get client");
+
+    client
+        .execute(
+            "UPDATE groupironman.members SET bank = $2, bank_last_update = NOW() WHERE group_id = $1 AND member_name = 'alice'",
+            &[&group_id, &vec![42i32, 3i32]],
+        )
+        .await
+        .expect("failed to seed alice");
+    db::add_must_bank_item(&client, group_id, 42)
+        .await
+        .expect("failed to tag must-bank item");
+
+    let pings = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("poll failed");
+    assert!(
+        pings.is_empty(),
+        "a member who is still online should not be pinged for holding the item"
+    );
 }

@@ -50,14 +50,16 @@ function getBankPingData() {
   return get('/get-bank-ping-data');
 }
 
-// discord_id is returned unconditionally regardless of from_time (only the
-// stat/inventory/etc columns are gated by it), so the epoch is just "give me
-// every member". include_heavy=false skips bank/potion_storage -- nothing
-// that calls this (memberCache, dryStreak, assistant) ever reads either
-// field, so there's no reason to pay for pulling everyone's full bank
-// contents on every call.
+// name/discord_id/color are returned unconditionally regardless of from_time
+// (only the stat/inventory/etc columns are gated by it), and every caller of
+// this -- memberCache, dryStreak, assistant, /dry-streak autocomplete -- reads
+// nothing but those. So from_time is *now*, not the epoch: every gated column
+// then fails its `>= from_time` check and comes back as a 4-byte NULL instead
+// of the member's real skills/quests/inventory/equipment blob, which no caller
+// was ever going to look at. include_heavy=false already skipped
+// bank/potion_storage; this drops the rest of the dead payload.
 function getGroupMembers() {
-  const from_time = encodeURIComponent(new Date(0).toISOString());
+  const from_time = encodeURIComponent(new Date().toISOString());
   return get(`/get-group-data?from_time=${from_time}&include_heavy=false`);
 }
 

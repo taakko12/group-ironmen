@@ -967,7 +967,7 @@ ORDER BY p.created_at ASC
 }
 
 /// Decodes a raw `[item_id, quantity, ...]` snapshot column into (id, qty)
-/// pairs, same encoding as `decode_item_ids` but keeping quantities.
+/// pairs.
 fn decode_item_stacks(raw: &[i32]) -> Vec<(i32, i32)> {
     raw.chunks_exact(2).map(|c| (c[0], c[1])).collect()
 }
@@ -1508,23 +1508,6 @@ pub async fn add_manual_bank_pings_batch(
     Ok(())
 }
 
-/// Decodes a raw `[item_id, quantity, item_id, quantity, ...]` column (the
-/// same encoding the frontend's `transformItemsFromStorage` expects) into the
-/// set of valid (id > 0) item ids present.
-fn decode_item_ids(raw: &Option<Vec<i32>>) -> HashSet<i32> {
-    let mut ids = HashSet::new();
-    if let Some(items) = raw {
-        let mut i = 0;
-        while i + 1 < items.len() {
-            if items[i] > 0 {
-                ids.insert(items[i]);
-            }
-            i += 2;
-        }
-    }
-    ids
-}
-
 // This threshold measures time since last_updated, so it's effectively 20
 // extra minutes on top of the frontend's 20-minute "inactive" indicator
 // (site/src/data/member-data.js, which itself matches OSRS's max AFK
@@ -1553,76 +1536,79 @@ const INACTIVE_THRESHOLD_MINUTES: i64 = 40;
 /// pings still drain and deliver normally, since those were explicitly
 /// requested rather than being the automated noise the toggle is for.
 pub async fn poll_bank_pings(client: &Client, group_id: i64) -> Result<Vec<PendingBankPing>, ApiError> {
-    let must_bank_items: HashSet<i32> = get_must_bank_items(client, group_id).await?.into_iter().collect();
-    let bank_pings_enabled = get_bank_pings_enabled(client, group_id).await?;
-
-    if bank_pings_enabled && !must_bank_items.is_empty() {
-        // The inactivity cutoff is pushed into the WHERE clause (not just
-        // checked in Rust after fetching) so Postgres never sends
-        // equipment/inventory/bank -- the expensive, unbounded columns --
-        // for members who are still actively playing. Polled every 10s
-        // (bot/bankPings.js) but only ~40 minutes of inactivity is
-        // ever actionable, so on any normal group this now returns zero
-        // rows almost all the time instead of every member's full bank on
-        // every poll, which was the dominant source of Supabase egress.
-        let cutoff = Utc::now() - chrono::Duration::minutes(INACTIVE_THRESHOLD_MINUTES);
-        let stmt = client
-            .prepare_cached(
-                r#"
-SELECT member_id, equipment, inventory, bank,
-GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
-quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
-rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
-collection_log_last_update) as last_updated
-FROM groupironman.members WHERE group_id=$1 AND member_name != $2
-AND GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
-quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
-rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
-collection_log_last_update) <= $3
-"#,
-            )
-            .await?;
-        let rows = client
-            .query(&stmt, &[&group_id, &SHARED_MEMBER, &cutoff])
-            .await
-            .map_err(ApiError::PollBankPingsError)?;
-
-        let insert_stmt = client
-            .prepare_cached(
-                r#"
+    // Queueing new offline pings happens entirely inside Postgres.
+    //
+    // The previous version fetched equipment/inventory/bank for every member
+    // past the inactivity cutoff and intersected them against must_bank_items
+    // in Rust. The comment there claimed that returned "zero rows almost all
+    // the time" -- that had the condition backwards. Being inactive for 40+
+    // minutes is a group's *steady* state, not a rare one: any member who
+    // isn't logged in right now matches, all night, every night. So this
+    // shipped every offline member's full bank across the pooler every 10
+    // seconds (bot/bankPings.js), measured at ~16KB per poll / ~140MB a day,
+    // to almost always produce nothing.
+    //
+    // Doing the intersection server-side means the only bytes crossing the
+    // wire are the rows actually inserted -- normally none. The must-bank list
+    // and the group's bank_pings_enabled toggle are subqueries rather than
+    // their own round trips for the same reason, taking the poll from four
+    // sequential queries down to two.
+    //
+    // Item columns are `[id, qty, id, qty, ...]`, so the ids are the odd
+    // ORDINALITY entries -- the SQL equivalent of the old decode_item_ids'
+    // `i += 2` walk, including its `> 0` skip for empty slots.
+    let cutoff = Utc::now() - chrono::Duration::minutes(INACTIVE_THRESHOLD_MINUTES);
+    let queue_stmt = client
+        .prepare_cached(
+            r#"
 INSERT INTO groupironman.bank_pings (member_id, item_id, reason)
-SELECT $1, $2, 'offline'
-WHERE NOT EXISTS (
-    SELECT 1 FROM groupironman.bank_pings
-    WHERE member_id=$1 AND item_id=$2 AND reason='offline' AND created_at > $3
+SELECT h.member_id, h.item_id, 'offline'
+FROM (
+    SELECT m.member_id, m.last_updated, u.val AS item_id
+    FROM (
+        SELECT member_id,
+        GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
+        quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
+        rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
+        collection_log_last_update) AS last_updated,
+        COALESCE(equipment, '{}'::int4[]) AS equipment,
+        COALESCE(inventory, '{}'::int4[]) AS inventory,
+        COALESCE(bank, '{}'::int4[]) AS bank
+        FROM groupironman.members
+        WHERE group_id=$1 AND member_name != $2
+        AND GREATEST(stats_last_update, coordinates_last_update, skills_last_update,
+        quests_last_update, inventory_last_update, equipment_last_update, bank_last_update,
+        rune_pouch_last_update, interacting_last_update, seed_vault_last_update, diary_vars_last_update,
+        collection_log_last_update) <= $3
+    ) m
+    CROSS JOIN LATERAL (
+        SELECT DISTINCT held.val
+        FROM (
+            SELECT val, ord FROM unnest(m.equipment) WITH ORDINALITY AS t(val, ord)
+            UNION ALL
+            SELECT val, ord FROM unnest(m.inventory) WITH ORDINALITY AS t(val, ord)
+            UNION ALL
+            SELECT val, ord FROM unnest(m.bank) WITH ORDINALITY AS t(val, ord)
+        ) held
+        WHERE held.ord % 2 = 1 AND held.val > 0
+        AND held.val IN (SELECT item_id FROM groupironman.must_bank_items WHERE group_id=$1)
+    ) u
+) h
+WHERE EXISTS (
+    SELECT 1 FROM groupironman.groups g WHERE g.group_id=$1 AND g.bank_pings_enabled
+)
+AND NOT EXISTS (
+    SELECT 1 FROM groupironman.bank_pings p
+    WHERE p.member_id=h.member_id AND p.item_id=h.item_id
+    AND p.reason='offline' AND p.created_at > h.last_updated
 )
 "#,
-            )
-            .await?;
-
-        for row in rows {
-            // SQL's GREATEST(...NULL...) is NULL, and `NULL <= $3` is
-            // UNKNOWN (excluded by WHERE), so every row reaching this loop
-            // already has a non-null, past-cutoff last_updated.
-            let last_updated: DateTime<Utc> = row.try_get("last_updated")?;
-
-            let member_id: i64 = row.try_get("member_id")?;
-            let equipment: Option<Vec<i32>> = row.try_get("equipment").ok();
-            let inventory: Option<Vec<i32>> = row.try_get("inventory").ok();
-            let bank: Option<Vec<i32>> = row.try_get("bank").ok();
-
-            let mut held_ids = decode_item_ids(&equipment);
-            held_ids.extend(decode_item_ids(&inventory));
-            held_ids.extend(decode_item_ids(&bank));
-
-            for item_id in held_ids.intersection(&must_bank_items) {
-                client
-                    .execute(&insert_stmt, &[&member_id, item_id, &last_updated])
-                    .await
-                    .map_err(ApiError::PollBankPingsError)?;
-            }
-        }
-    }
+        )
+        .await?;
+    client
+        .execute(&queue_stmt, &[&group_id, &SHARED_MEMBER, &cutoff])
+        .await
+        .map_err(ApiError::PollBankPingsError)?;
 
     let drain_stmt = client
         .prepare_cached(

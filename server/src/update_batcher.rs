@@ -637,6 +637,8 @@ mod tests {
             collection_log_v2: None,
             potion_storage: None,
             last_updated: None,
+            discord_id: None,
+            color: None,
         }
     }
 
