@@ -9,6 +9,7 @@ use futures_util::stream::{self, StreamExt};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use tokio::time::{self, Duration};
 
 // bank/potion_storage are only ever rendered by the /items page, same as
 // get-group-data's include_heavy -- default false so the common case (any
@@ -98,21 +99,35 @@ pub async fn live(
     let initial_stream = stream::once(async move { Ok::<_, Error>(initial_event) });
 
     let heavy = query.heavy;
-    let live_stream = stream::unfold(rx, move |mut rx| async move {
+    // Without a heartbeat, a quiet group (nobody generating updates) sends no
+    // bytes at all -- Railway's edge proxy (and backgrounded mobile browsers)
+    // eventually drop that idle connection, EventSource silently reconnects,
+    // and every reconnect re-runs the full get_group_data snapshot above.
+    // That reconnect churn, not real game activity, was the dominant driver
+    // of Shared Pooler egress (steady ~550MB/day even with light play).
+    // A `: ping` comment every 20s keeps the connection alive so it stops
+    // happening; well under any proxy's typical idle timeout.
+    let heartbeat = time::interval_at(time::Instant::now() + Duration::from_secs(20), Duration::from_secs(20));
+    let live_stream = stream::unfold((rx, heartbeat), move |(mut rx, mut heartbeat)| async move {
         loop {
-            match rx.recv().await {
-                Ok(push) => {
-                    if let Some(event) = event_for_push(&push, group_id, heavy) {
-                        return Some((Ok::<_, Error>(event), rx));
+            tokio::select! {
+                push = rx.recv() => match push {
+                    Ok(push) => {
+                        if let Some(event) = event_for_push(&push, group_id, heavy) {
+                            return Some((Ok::<_, Error>(event), (rx, heartbeat)));
+                        }
+                        // Nothing relevant to this group in this push; keep waiting.
                     }
-                    // Nothing relevant to this group in this push; keep waiting.
+                    // A slow subscriber can fall behind the broadcast channel's
+                    // ring buffer; skip past the gap rather than erroring out --
+                    // the next real update still arrives, just without the ones
+                    // that were dropped in between.
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => return None,
+                },
+                _ = heartbeat.tick() => {
+                    return Some((Ok::<_, Error>(web::Bytes::from_static(b": ping\n\n")), (rx, heartbeat)));
                 }
-                // A slow subscriber can fall behind the broadcast channel's
-                // ring buffer; skip past the gap rather than erroring out --
-                // the next real update still arrives, just without the ones
-                // that were dropped in between.
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(broadcast::error::RecvError::Closed) => return None,
             }
         }
     });
