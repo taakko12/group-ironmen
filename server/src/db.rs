@@ -4,8 +4,8 @@ use crate::models::{
     AggregateSkillData, AttachmentUrlUpdate, BankPingEntry, CreateGroup, DeathEntry, Goal,
     GroupBankPingData, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
     GroupStorageLog, LootDropEntry, MemberBankPingData, MemberDeathData, MemberLootData,
-    MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPing,
-    RecentBankPings, StaleAttachment, StaleAttachments, StorageLogAction, StorageLogEntry,
+    MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing,
+    StaleAttachment, StaleAttachments, StorageLogAction, StorageLogEntry,
     SHARED_MEMBER,
 };
 use chrono::{DateTime, Utc};
@@ -729,7 +729,24 @@ ORDER BY d.recorded_at ASC
     Ok(member_data.into_values().collect())
 }
 
-pub async fn get_attachment_urls(client: &Client, group_id: i64) -> Result<StaleAttachments, ApiError> {
+/// Attachment URLs whose Discord signature expires before `expiring_before`,
+/// so the bot only pulls the handful it is actually about to refresh.
+///
+/// This used to return every screenshot/image URL the group had ever recorded
+/// -- an unbounded set that only grows -- purely so the bot could parse each
+/// one's expiry and throw almost all of them away. Discord puts that expiry
+/// right in the URL as `ex=<hex unix seconds>`, so it filters here instead.
+///
+/// A URL whose `ex` is missing or not the expected 8 hex digits is still
+/// returned rather than silently dropped: the bot skips those on its own, and
+/// if Discord ever changes the format this degrades to the old behaviour
+/// instead of quietly refreshing nothing. `bit(32)::int8` keeps the hex
+/// unsigned -- `::int` would wrap past 2^31 and read as long-expired.
+pub async fn get_attachment_urls(
+    client: &Client,
+    group_id: i64,
+    expiring_before: &DateTime<Utc>,
+) -> Result<StaleAttachments, ApiError> {
     let mut result = Vec::new();
 
     let loot_stmt = client
@@ -739,11 +756,15 @@ SELECT d.id, d.screenshot_url
 FROM groupironman.loot_drops d
 INNER JOIN groupironman.members m ON m.member_id = d.member_id
 WHERE m.group_id = $1 AND d.screenshot_url IS NOT NULL
+AND (
+    substring(d.screenshot_url from 'ex=([0-9a-fA-F]{8})') IS NULL
+    OR to_timestamp(('x' || substring(d.screenshot_url from 'ex=([0-9a-fA-F]{8})'))::bit(32)::int8) < $2
+)
 "#,
         )
         .await?;
     let loot_rows = client
-        .query(&loot_stmt, &[&group_id])
+        .query(&loot_stmt, &[&group_id, &expiring_before])
         .await
         .map_err(ApiError::GetAttachmentUrlsError)?;
     for row in loot_rows {
@@ -761,11 +782,15 @@ SELECT d.id, d.image_url
 FROM groupironman.deaths d
 INNER JOIN groupironman.members m ON m.member_id = d.member_id
 WHERE m.group_id = $1 AND d.image_url IS NOT NULL
+AND (
+    substring(d.image_url from 'ex=([0-9a-fA-F]{8})') IS NULL
+    OR to_timestamp(('x' || substring(d.image_url from 'ex=([0-9a-fA-F]{8})'))::bit(32)::int8) < $2
+)
 "#,
         )
         .await?;
     let death_rows = client
-        .query(&death_stmt, &[&group_id])
+        .query(&death_stmt, &[&group_id, &expiring_before])
         .await
         .map_err(ApiError::GetAttachmentUrlsError)?;
     for row in death_rows {
@@ -1549,20 +1574,21 @@ pub async fn poll_bank_pings(client: &Client, group_id: i64) -> Result<Vec<Pendi
     // to almost always produce nothing.
     //
     // Doing the intersection server-side means the only bytes crossing the
-    // wire are the rows actually inserted -- normally none. The must-bank list
-    // and the group's bank_pings_enabled toggle are subqueries rather than
-    // their own round trips for the same reason, taking the poll from four
-    // sequential queries down to two.
+    // wire are the rows actually delivered -- normally none. Queueing,
+    // draining and the quantity lookup are all one statement for the same
+    // reason, taking the poll from four sequential round trips (plus one per
+    // queued item) down to a single one.
     //
     // Item columns are `[id, qty, id, qty, ...]`, so the ids are the odd
     // ORDINALITY entries -- the SQL equivalent of the old decode_item_ids'
     // `i += 2` walk, including its `> 0` skip for empty slots.
     let cutoff = Utc::now() - chrono::Duration::minutes(INACTIVE_THRESHOLD_MINUTES);
-    let queue_stmt = client
+    let stmt = client
         .prepare_cached(
             r#"
-INSERT INTO groupironman.bank_pings (member_id, item_id, reason)
-SELECT h.member_id, h.item_id, 'offline'
+WITH queued AS (
+INSERT INTO groupironman.bank_pings (member_id, item_id, reason, delivered_at)
+SELECT h.member_id, h.item_id, 'offline', NOW()
 FROM (
     SELECT m.member_id, m.last_updated, u.val AS item_id
     FROM (
@@ -1602,140 +1628,59 @@ AND NOT EXISTS (
     WHERE p.member_id=h.member_id AND p.item_id=h.item_id
     AND p.reason='offline' AND p.created_at > h.last_updated
 )
-"#,
-        )
-        .await?;
-    client
-        .execute(&queue_stmt, &[&group_id, &SHARED_MEMBER, &cutoff])
-        .await
-        .map_err(ApiError::PollBankPingsError)?;
-
-    let drain_stmt = client
-        .prepare_cached(
-            r#"
-UPDATE groupironman.bank_pings p
-SET delivered_at = NOW()
-FROM groupironman.members m
-WHERE p.member_id = m.member_id AND m.group_id = $1 AND p.delivered_at IS NULL
-RETURNING m.member_id, m.member_name, m.discord_id, p.item_id, p.reason
+    RETURNING member_id, item_id, reason
+),
+-- Everything still undelivered at snapshot time: manual pings from the items
+-- page, plus any offline ping an earlier poll queued. Data-modifying CTEs all
+-- see the same snapshot, so this deliberately cannot see `queued`'s inserts --
+-- which is why those are written already-delivered above and unioned in here
+-- instead, keeping same-poll delivery without risking a second send.
+drained AS (
+    UPDATE groupironman.bank_pings p
+    SET delivered_at = NOW()
+    FROM groupironman.members m
+    WHERE p.member_id = m.member_id AND m.group_id = $1 AND p.delivered_at IS NULL
+    RETURNING p.member_id, p.item_id, p.reason
+),
+delivered AS (
+    SELECT member_id, item_id, reason FROM drained
+    UNION ALL
+    SELECT member_id, item_id, reason FROM queued
+)
+-- Pings carry only an item_id, so the quantity is summed here rather than at
+-- queue time: it should reflect what the member holds when the alert actually
+-- goes out. Same `[id, qty, ...]` walk as above, but keeping the qty at i+1.
+SELECT m.member_name, m.discord_id, d.item_id, d.reason, q.quantity
+FROM delivered d
+JOIN groupironman.members m ON m.member_id = d.member_id
+CROSS JOIN LATERAL (
+    SELECT COALESCE(SUM(a.arr[i + 1]), 0)::int8 AS quantity
+    FROM (VALUES (COALESCE(m.equipment, '{}'::int4[])),
+                 (COALESCE(m.inventory, '{}'::int4[])),
+                 (COALESCE(m.bank, '{}'::int4[]))) AS a(arr)
+    CROSS JOIN generate_subscripts(a.arr, 1) AS i
+    WHERE i % 2 = 1 AND a.arr[i] = d.item_id
+) q
+-- They may have banked/dropped the item since the ping was queued; a "you're
+-- holding 0 of this" alert is never right. The row stays marked delivered
+-- either way, so it isn't re-checked next poll.
+WHERE q.quantity > 0
 "#,
         )
         .await?;
     let rows = client
-        .query(&drain_stmt, &[&group_id])
+        .query(&stmt, &[&group_id, &SHARED_MEMBER, &cutoff])
         .await
         .map_err(ApiError::PollBankPingsError)?;
-
-    if rows.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Delivered pings only carry an item_id, not a quantity, so look up how
-    // much of that item each pinged member is actually holding right now
-    // (equipment + inventory + bank) -- fetched fresh here rather than at
-    // ping-creation time so the count reflects what's true when the alert
-    // actually goes out, not whatever it was when the offline/manual ping
-    // was first queued. Queries every member in the group (same WHERE
-    // clause as the must-bank-items scan above) rather than filtering to
-    // just the pinged member_ids, since groups are small and this avoids
-    // relying on an untested `= ANY($1)` array-parameter query shape.
-    let holdings_stmt = client
-        .prepare_cached("SELECT member_id, equipment, inventory, bank FROM groupironman.members WHERE group_id=$1")
-        .await?;
-    let holdings_rows = client
-        .query(&holdings_stmt, &[&group_id])
-        .await
-        .map_err(ApiError::PollBankPingsError)?;
-
-    let mut holdings: HashMap<i64, (Option<Vec<i32>>, Option<Vec<i32>>, Option<Vec<i32>>)> = HashMap::new();
-    for row in holdings_rows {
-        let member_id: i64 = row.try_get("member_id")?;
-        let equipment: Option<Vec<i32>> = row.try_get("equipment").ok();
-        let inventory: Option<Vec<i32>> = row.try_get("inventory").ok();
-        let bank: Option<Vec<i32>> = row.try_get("bank").ok();
-        holdings.insert(member_id, (equipment, inventory, bank));
-    }
 
     let mut result = Vec::with_capacity(rows.len());
     for row in rows {
-        let member_id: i64 = row.try_get("member_id")?;
-        let item_id: i32 = row.try_get("item_id")?;
-        let quantity = holdings
-            .get(&member_id)
-            .map(|(equipment, inventory, bank)| {
-                quantity_of_item(equipment, item_id) + quantity_of_item(inventory, item_id) + quantity_of_item(bank, item_id)
-            })
-            .unwrap_or(0);
-
-        // The member may have banked/dropped/lost the item between when this
-        // ping was queued and now (e.g. a storage-log deposit that zeroed
-        // their cached snapshot) -- a "you're holding 0 of this, go bank it"
-        // alert is never correct, so drop it instead of delivering it. The
-        // row is still marked delivered above either way, so it won't be
-        // re-checked on the next poll.
-        if quantity <= 0 {
-            continue;
-        }
-
         result.push(PendingBankPing {
             member_name: row.try_get("member_name")?,
             discord_id: row.try_get("discord_id").ok(),
-            item_id,
-            reason: row.try_get("reason")?,
-            quantity,
-        });
-    }
-
-    Ok(result)
-}
-
-/// Sums the quantity of `item_id` across a raw `[id, qty, id, qty, ...]`
-/// snapshot column (equipment/inventory/bank all use this encoding), via the
-/// same (id, qty) decode `remove_item_quantity`/`add_item_quantity` use.
-fn quantity_of_item(raw: &Option<Vec<i32>>, item_id: i32) -> i64 {
-    match raw {
-        Some(items) => decode_item_stacks(items)
-            .into_iter()
-            .filter(|(id, _)| *id == item_id)
-            .map(|(_, qty)| qty as i64)
-            .sum(),
-        None => 0,
-    }
-}
-
-/// Non-destructive read of recent bank pings for the site's toast
-/// notifications. Deliberately separate from `poll_bank_pings`, which
-/// drains the queue for the Discord bot's delivery loop -- calling that
-/// from the frontend too would race the bot and steal pings meant for
-/// Discord, so this just reads recent rows without touching `delivered_at`.
-pub async fn get_recent_bank_pings(
-    client: &Client,
-    group_id: i64,
-) -> Result<RecentBankPings, ApiError> {
-    let stmt = client
-        .prepare_cached(
-            r#"
-SELECT member_name, item_id, reason, created_at
-FROM groupironman.bank_pings p
-INNER JOIN groupironman.members m ON m.member_id=p.member_id
-WHERE m.group_id=$1
-ORDER BY p.created_at DESC
-LIMIT 20
-"#,
-        )
-        .await?;
-    let rows = client
-        .query(&stmt, &[&group_id])
-        .await
-        .map_err(ApiError::GetRecentBankPingsError)?;
-
-    let mut result = Vec::with_capacity(rows.len());
-    for row in rows {
-        result.push(RecentBankPing {
-            member_name: row.try_get("member_name")?,
             item_id: row.try_get("item_id")?,
             reason: row.try_get("reason")?,
-            created_at: row.try_get("created_at")?,
+            quantity: row.try_get("quantity")?,
         });
     }
 

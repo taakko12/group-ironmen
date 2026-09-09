@@ -4,7 +4,7 @@ use crate::error::ApiError;
 use crate::models::{
     AddGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData, GroupGoals,
     GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, LivePush, MustBankItem,
-    NameChange, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing, RecentBankPings,
+    NameChange, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing,
     MemberBossKcData, RenameGroupMember, RequestBank, RequestBankBatch, SetBankPingsEnabled,
     SetGoalDone, SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls,
     WomPlayerGains, SHARED_MEMBER,
@@ -449,13 +449,27 @@ pub async fn get_death_data(
     Ok(web::Json(death_data))
 }
 
+/// `expiring_before` is the caller's refresh horizon -- only URLs whose
+/// Discord signature dies before then come back. It's the bot's policy (see
+/// attachmentRefresh.js's REFRESH_MARGIN_MS) so it stays the caller's to set;
+/// omitting it returns everything, as it did before the filter existed.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttachmentUrlsQuery {
+    pub expiring_before: Option<DateTime<Utc>>,
+}
+
 #[get("/attachment-urls")]
 pub async fn get_attachment_urls(
     auth: Authenticated,
     db_pool: web::Data<Pool>,
+    query: web::Query<AttachmentUrlsQuery>,
 ) -> Result<web::Json<StaleAttachments>, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    let result = db::get_attachment_urls(&client, auth.group_id).await?;
+    let expiring_before = query
+        .expiring_before
+        .unwrap_or_else(|| DateTime::<Utc>::MAX_UTC);
+    let result = db::get_attachment_urls(&client, auth.group_id, &expiring_before).await?;
     Ok(web::Json(result))
 }
 
@@ -660,16 +674,6 @@ pub async fn poll_bank_pings(
 ) -> Result<web::Json<Vec<PendingBankPing>>, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     let pings = db::poll_bank_pings(&client, auth.group_id).await?;
-    Ok(web::Json(pings))
-}
-
-#[get("/recent-bank-pings")]
-pub async fn get_recent_bank_pings(
-    auth: Authenticated,
-    db_pool: web::Data<Pool>,
-) -> Result<web::Json<RecentBankPings>, Error> {
-    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    let pings = db::get_recent_bank_pings(&client, auth.group_id).await?;
     Ok(web::Json(pings))
 }
 

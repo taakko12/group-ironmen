@@ -37,8 +37,13 @@ function chunk(array, size) {
 }
 
 async function refreshOnce() {
+  // The backend filters to URLs expiring before this, so it returns the
+  // handful actually due instead of every screenshot the group has ever
+  // recorded -- that set only grows, and we discarded nearly all of it here.
+  // The margin stays defined on this side since it's this loop's policy.
+  const expiringBefore = new Date(Date.now() + REFRESH_MARGIN_MS).toISOString();
   const response = await fetch(
-    `${process.env.BACKEND_URL}/api/group/${process.env.GROUP_NAME}/attachment-urls`,
+    `${process.env.BACKEND_URL}/api/group/${process.env.GROUP_NAME}/attachment-urls?expiring_before=${encodeURIComponent(expiringBefore)}`,
     { headers: { Authorization: process.env.GROUP_TOKEN } }
   );
   if (!response.ok) {

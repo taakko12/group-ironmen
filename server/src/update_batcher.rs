@@ -23,7 +23,13 @@ pub async fn background_worker(
     notify: Option<mpsc::Sender<()>>,
     live_tx: broadcast::Sender<Arc<LivePush>>,
 ) {
-    let batch_timeout = Duration::from_millis(50);
+    // Plugin updates arrive roughly once a second per online member, so a 50ms
+    // window almost never caught two of them -- nearly every batch was a batch
+    // of one, paying a full statement round trip per member update (~95k/day).
+    // 500ms actually groups them without being perceptible: the plugin itself
+    // only reports every 1-3s, and /live deltas are pushed after the write, so
+    // this is well inside the noise of when the data existed in the first place.
+    let batch_timeout = Duration::from_millis(500);
 
     loop {
         let mut buffer: Vec<GroupMember> = Vec::with_capacity(BATCH_SIZE);

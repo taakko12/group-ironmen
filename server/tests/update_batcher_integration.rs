@@ -1280,6 +1280,110 @@ async fn test_offline_bank_ping_skipped_when_disabled_or_untagged() {
 }
 
 #[tokio::test]
+async fn test_attachment_urls_filtered_by_discord_expiry() {
+    let _guard = TEST_MUTEX.lock().await;
+    let pool = create_test_pool().await;
+    let group_id = setup_test_group(&pool).await;
+    let client = pool.get().await.expect("failed to get client");
+
+    // ex=5f5e1000 -> 2020, long expired. ex=7fffff00 -> 2038, far future.
+    // The third has no ex at all and must still come back, since the bot is
+    // the thing that knows how to deal with an unparseable URL.
+    let member_id = db::get_member_id(&client, group_id, "alice")
+        .await
+        .expect("failed to get member id");
+    for url in [
+        "https://cdn.discordapp.com/expired.png?ex=5f5e1000&is=1&hm=2",
+        "https://cdn.discordapp.com/fresh.png?ex=7fffff00&is=1&hm=2",
+        "https://cdn.discordapp.com/legacy.png",
+    ] {
+        client
+            .execute(
+                "INSERT INTO groupironman.loot_drops (member_id, item_name, gp_value, screenshot_url, recorded_at) VALUES ($1, 'x', 1, $2, NOW())",
+                &[&member_id, &url],
+            )
+            .await
+            .expect("failed to insert loot drop");
+    }
+
+    let horizon = chrono::Utc::now() + chrono::Duration::hours(12);
+    let due = db::get_attachment_urls(&client, group_id, &horizon)
+        .await
+        .expect("failed to fetch attachment urls");
+
+    let urls: Vec<&str> = due.iter().map(|a| a.url.as_str()).collect();
+    assert_eq!(urls.len(), 2, "got: {:?}", urls);
+    assert!(urls.iter().any(|u| u.contains("expired.png")));
+    assert!(urls.iter().any(|u| u.contains("legacy.png")));
+    assert!(
+        !urls.iter().any(|u| u.contains("fresh.png")),
+        "a URL valid well past the horizon should not be refreshed"
+    );
+}
+
+#[tokio::test]
+async fn test_manual_bank_ping_delivered_with_summed_quantity() {
+    let _guard = TEST_MUTEX.lock().await;
+    let pool = create_test_pool().await;
+    let group_id = setup_test_group(&pool).await;
+    let client = pool.get().await.expect("failed to get client");
+
+    // Manual requests are explicit, so none of the offline/tagged gating
+    // applies -- alice stays online and the item is never tagged must-bank.
+    // This is the drain half of the poll, distinct from the queue half the
+    // offline tests cover.
+    client
+        .execute(
+            "UPDATE groupironman.members SET equipment = $2, bank = $3 WHERE group_id = $1 AND member_name = 'alice'",
+            &[&group_id, &vec![42i32, 1i32], &vec![42i32, 6i32]],
+        )
+        .await
+        .expect("failed to seed alice");
+
+    db::add_manual_bank_ping(&client, group_id, "alice", 42)
+        .await
+        .expect("failed to queue manual ping");
+
+    let pings = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("poll failed");
+    assert_eq!(pings.len(), 1);
+    assert_eq!(pings[0].member_name, "alice");
+    assert_eq!(pings[0].reason, "manual");
+    // 1 equipped + 6 banked, summed across all three item columns.
+    assert_eq!(pings[0].quantity, 7);
+
+    // Draining marks it delivered, so it must not be sent a second time.
+    let again = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("second poll failed");
+    assert!(again.is_empty(), "a delivered ping should not be re-sent");
+}
+
+#[tokio::test]
+async fn test_bank_ping_dropped_when_item_no_longer_held() {
+    let _guard = TEST_MUTEX.lock().await;
+    let pool = create_test_pool().await;
+    let group_id = setup_test_group(&pool).await;
+    let client = pool.get().await.expect("failed to get client");
+
+    // Queued for an item alice holds none of -- e.g. she banked it between
+    // the request and the poll. "You're holding 0 of this, go bank it" is
+    // never a correct alert, so it should be dropped rather than delivered.
+    db::add_manual_bank_ping(&client, group_id, "alice", 42)
+        .await
+        .expect("failed to queue manual ping");
+
+    let pings = db::poll_bank_pings(&client, group_id)
+        .await
+        .expect("poll failed");
+    assert!(
+        pings.is_empty(),
+        "a ping for an item no longer held should not be delivered"
+    );
+}
+
+#[tokio::test]
 async fn test_active_member_holding_tagged_item_is_not_pinged() {
     let _guard = TEST_MUTEX.lock().await;
     let pool = create_test_pool().await;

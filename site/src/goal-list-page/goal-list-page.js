@@ -3,7 +3,11 @@ import { goals } from "../data/goals";
 import { utility } from "../utility";
 
 const LAST_GOAL_AUTHOR_KEY = "lastGoalAuthor";
-const REFRESH_INTERVAL_MS = 10000;
+// Goals are edited by hand a few times a week, so re-fetching the list every
+// 10s while this page sat open was the last poll loop left in an app that
+// otherwise gets its updates pushed over /live. A minute is still well inside
+// "someone else added a goal and I noticed" territory.
+const REFRESH_INTERVAL_MS = 60000;
 
 function escapeHtml(str) {
   const div = document.createElement("div");

@@ -49,8 +49,6 @@ pub enum ApiError {
     #[from(ignore)]
     PollBankPingsError(tokio_postgres::error::Error),
     #[from(ignore)]
-    GetRecentBankPingsError(tokio_postgres::error::Error),
-    #[from(ignore)]
     GetBankPingDataError(tokio_postgres::error::Error),
     #[from(ignore)]
     AddStorageLogError(tokio_postgres::error::Error),
@@ -107,9 +105,6 @@ impl ResponseError for ApiError {
             ApiError::GoalError(ref err) => handle_pg_error(err, "GoalError"),
             ApiError::RequestBankError(ref err) => handle_pg_error(err, "RequestBankError"),
             ApiError::PollBankPingsError(ref err) => handle_pg_error(err, "PollBankPingsError"),
-            ApiError::GetRecentBankPingsError(ref err) => {
-                handle_pg_error(err, "GetRecentBankPingsError")
-            }
             ApiError::GetBankPingDataError(ref err) => handle_pg_error(err, "GetBankPingDataError"),
             ApiError::AddStorageLogError(ref err) => handle_pg_error(err, "AddStorageLogError"),
             ApiError::GetStorageLogError(ref err) => handle_pg_error(err, "GetStorageLogError"),
