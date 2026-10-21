@@ -1,0 +1,85 @@
+gear-goals-page {
+  display: block;
+}
+
+.gear-goals-page__form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gear-goals-page__item-input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.gear-goals-page__target {
+  width: 90px;
+}
+
+.gear-goals-page__table {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.gear-goals-page__grid {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.gear-goals-page__grid th,
+.gear-goals-page__grid td {
+  border: 1px solid var(--light-border);
+  padding: 2px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.gear-goals-page__grid th {
+  font-weight: normal;
+  opacity: 0.8;
+}
+
+.gear-goals-page__item-header,
+.gear-goals-page__item {
+  text-align: left;
+}
+
+.gear-goals-page__item-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gear-goals-page__item item-box {
+  height: 32px;
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.gear-goals-page__cell--have {
+  background-color: rgba(13, 193, 13, 0.35);
+  color: var(--primary-text);
+}
+
+.gear-goals-page__progress {
+  min-width: 140px;
+}
+
+.gear-goals-page__bar {
+  height: 8px;
+  background-color: var(--darken);
+  border: 1px solid var(--light-border);
+}
+
+.gear-goals-page__bar-fill {
+  height: 100%;
+  background-color: var(--orange);
+}
+
+.gear-goals-page__empty {
+  opacity: 0.6;
+  font-style: italic;
+  padding: 8px 0;
+}

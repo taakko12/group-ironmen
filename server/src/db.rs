@@ -1,8 +1,8 @@
 use crate::crypto::token_hash;
 use crate::error::ApiError;
 use crate::models::{
-    AggregateSkillData, AttachmentUrlUpdate, BankPingEntry, CreateGroup, DeathEntry, Goal,
-    GroupBankPingData, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
+    AggregateSkillData, AttachmentUrlUpdate, BankPingEntry, CreateGroup, DeathEntry, GearGoal,
+    Goal, GroupBankPingData, GroupDeathData, GroupLootData, GroupMember, GroupSkillData,
     GroupStorageLog, LootDropEntry, MemberBankPingData, MemberDeathData, MemberLootData,
     MemberSkillData, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing,
     StaleAttachment, StaleAttachments, StorageLogAction, StorageLogEntry,
@@ -1449,6 +1449,106 @@ pub async fn get_goals(client: &Client, group_id: i64) -> Result<Vec<Goal>, ApiE
     Ok(result)
 }
 
+/// Upsert: re-adding an item that is already tracked just changes its target,
+/// which is also how the site edits one.
+pub async fn add_gear_goal(
+    client: &Client,
+    group_id: i64,
+    item_id: i32,
+    target_quantity: i32,
+) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+INSERT INTO groupironman.gear_goals (group_id, item_id, target_quantity) VALUES ($1, $2, $3)
+ON CONFLICT (group_id, item_id) DO UPDATE SET target_quantity=EXCLUDED.target_quantity
+"#,
+        )
+        .await?;
+    client
+        .execute(&stmt, &[&group_id, &item_id, &target_quantity])
+        .await
+        .map_err(ApiError::GoalError)?;
+
+    Ok(())
+}
+
+pub async fn delete_gear_goal(client: &Client, group_id: i64, id: i64) -> Result<(), ApiError> {
+    let stmt = client
+        .prepare_cached("DELETE FROM groupironman.gear_goals WHERE id=$1 AND group_id=$2")
+        .await?;
+    client
+        .execute(&stmt, &[&id, &group_id])
+        .await
+        .map_err(ApiError::GoalError)?;
+    Ok(())
+}
+
+/// Every tracked item with how much each member holds of it.
+///
+/// The quantities are summed here rather than on the site because the site
+/// only has bank contents while the Items page is open (`heavyDataEnabled` in
+/// api.js) -- making the gear page a second full-bank subscriber is exactly
+/// the egress the bank-ping work moved into Postgres. Each member's item
+/// arrays get unnested once and filtered to the tracked ids, instead of
+/// re-scanning them per goal.
+///
+/// Item columns are `[id, qty, id, qty, ...]`, so ids sit on the odd
+/// `generate_subscripts` indices and their quantity at `i + 1`.
+pub async fn get_gear_goals(client: &Client, group_id: i64) -> Result<Vec<GearGoal>, ApiError> {
+    let stmt = client
+        .prepare_cached(
+            r#"
+WITH goals AS (
+    SELECT id, item_id, target_quantity FROM groupironman.gear_goals WHERE group_id=$1
+),
+held AS (
+    SELECT m.member_name, h.item_id, SUM(h.qty)::int8 AS quantity
+    FROM groupironman.members m
+    CROSS JOIN LATERAL (
+        SELECT a.arr[i] AS item_id, a.arr[i + 1] AS qty
+        FROM (VALUES (COALESCE(m.equipment, '{}'::int4[])),
+                     (COALESCE(m.inventory, '{}'::int4[])),
+                     (COALESCE(m.bank, '{}'::int4[]))) AS a(arr)
+        CROSS JOIN generate_subscripts(a.arr, 1) AS i
+        WHERE i % 2 = 1 AND a.arr[i] > 0
+    ) h
+    WHERE m.group_id=$1 AND h.item_id IN (SELECT item_id FROM goals)
+    GROUP BY m.member_name, h.item_id
+)
+SELECT g.id, g.item_id, g.target_quantity, m.member_name, COALESCE(h.quantity, 0) AS quantity
+FROM goals g
+CROSS JOIN (SELECT member_name FROM groupironman.members WHERE group_id=$1) m
+LEFT JOIN held h ON h.member_name = m.member_name AND h.item_id = g.item_id
+ORDER BY g.id, m.member_name
+"#,
+        )
+        .await?;
+    let rows = client
+        .query(&stmt, &[&group_id])
+        .await
+        .map_err(ApiError::GoalError)?;
+
+    let mut result: Vec<GearGoal> = Vec::new();
+    for row in rows {
+        let id: i64 = row.try_get("id")?;
+        if result.last().map(|g| g.id) != Some(id) {
+            result.push(GearGoal {
+                id,
+                item_id: row.try_get("item_id")?,
+                target_quantity: row.try_get("target_quantity")?,
+                quantities: std::collections::HashMap::new(),
+            });
+        }
+
+        if let Some(goal) = result.last_mut() {
+            goal.quantities
+                .insert(row.try_get("member_name")?, row.try_get("quantity")?);
+        }
+    }
+    Ok(result)
+}
+
 pub async fn add_manual_bank_ping(
     client: &Client,
     group_id: i64,
@@ -2413,6 +2513,27 @@ ALTER TABLE groupironman.groups ADD COLUMN IF NOT EXISTS bank_pings_enabled BOOL
             .await?;
 
         commit_migration(&transaction, "add_bank_pings_enabled_column").await?;
+        transaction.commit().await?;
+    }
+
+    if !has_migration_run(client, "create_gear_goals_table").await? {
+        let transaction = client.transaction().await?;
+        transaction
+            .execute(
+                r#"
+CREATE TABLE IF NOT EXISTS groupironman.gear_goals (
+    id BIGSERIAL PRIMARY KEY,
+    group_id BIGINT NOT NULL REFERENCES groupironman.groups(group_id),
+    item_id INTEGER NOT NULL,
+    target_quantity INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (group_id, item_id)
+);
+"#,
+                &[],
+            )
+            .await?;
+
+        commit_migration(&transaction, "create_gear_goals_table").await?;
         transaction.commit().await?;
     }
 

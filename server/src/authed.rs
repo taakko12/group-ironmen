@@ -2,7 +2,8 @@ use crate::auth_middleware::Authenticated;
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{
-    AddGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData, GroupGoals,
+    AddGearGoal, AddGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData,
+    GroupGearGoals, GroupGoals,
     GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, LivePush, MustBankItem,
     NameChange, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing,
     MemberBossKcData, RenameGroupMember, RequestBank, RequestBankBatch, SetBankPingsEnabled,
@@ -642,6 +643,45 @@ pub async fn delete_goal(
 ) -> Result<HttpResponse, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     db::delete_goal(&client, auth.group_id, body.id).await?;
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[get("/gear-goals")]
+pub async fn get_gear_goals(
+    auth: Authenticated,
+    db_pool: web::Data<Pool>,
+) -> Result<web::Json<GroupGearGoals>, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    let gear_goals = db::get_gear_goals(&client, auth.group_id).await?;
+    Ok(web::Json(gear_goals))
+}
+
+#[post("/gear-goals")]
+pub async fn add_gear_goal(
+    auth: Authenticated,
+    body: web::Json<AddGearGoal>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    if body.item_id <= 0 {
+        return Ok(HttpResponse::BadRequest().body("item_id must be positive"));
+    }
+    if body.target_quantity < 1 {
+        return Ok(HttpResponse::BadRequest().body("target_quantity must be at least 1"));
+    }
+
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::add_gear_goal(&client, auth.group_id, body.item_id, body.target_quantity).await?;
+    Ok(HttpResponse::Created().finish())
+}
+
+#[delete("/gear-goals")]
+pub async fn delete_gear_goal(
+    auth: Authenticated,
+    body: web::Json<GoalId>,
+    db_pool: web::Data<Pool>,
+) -> Result<HttpResponse, Error> {
+    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
+    db::delete_gear_goal(&client, auth.group_id, body.id).await?;
     Ok(HttpResponse::Ok().finish())
 }
 

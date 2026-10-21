@@ -307,6 +307,25 @@ pub type GroupGoals = Vec<Goal>;
 
 #[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
+pub struct AddGearGoal {
+    pub item_id: i32,
+    pub target_quantity: i32,
+}
+
+#[derive(Serialize)]
+pub struct GearGoal {
+    pub id: i64,
+    pub item_id: i32,
+    pub target_quantity: i32,
+    /// member name -> how many of this item they hold across equipment,
+    /// inventory and bank. Summed in Postgres so the gear page never has to
+    /// pull every member's full bank down the wire (see `get_gear_goals`).
+    pub quantities: std::collections::HashMap<String, i64>,
+}
+pub type GroupGearGoals = Vec<GearGoal>;
+
+#[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct RequestBank {
     pub member_name: String,
     pub item_id: i32,

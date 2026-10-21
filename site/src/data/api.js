@@ -73,6 +73,10 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/goal-done`;
   }
 
+  get gearGoalsUrl() {
+    return `${this.baseUrl}/group/${this.groupName}/gear-goals`;
+  }
+
   get requestBankUrl() {
     return `${this.baseUrl}/group/${this.groupName}/request-bank`;
   }
@@ -441,6 +445,44 @@ class Api {
 
   async deleteGoal(id) {
     const response = await fetch(this.goalsUrl, {
+      body: JSON.stringify({ id }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "DELETE",
+    });
+
+    return response;
+  }
+
+  // Quantities come back already summed per member (the gear page never has
+  // bank data locally -- see heavyDataEnabled).
+  async getGearGoals() {
+    const response = await fetch(this.gearGoalsUrl, {
+      headers: {
+        Authorization: this.groupToken,
+      },
+    });
+    return response.json();
+  }
+
+  // Re-posting an item that is already tracked updates its target quantity.
+  async addGearGoal(itemId, targetQuantity) {
+    const response = await fetch(this.gearGoalsUrl, {
+      body: JSON.stringify({ item_id: itemId, target_quantity: targetQuantity }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: this.groupToken,
+      },
+      method: "POST",
+    });
+
+    return response;
+  }
+
+  async deleteGearGoal(id) {
+    const response = await fetch(this.gearGoalsUrl, {
       body: JSON.stringify({ id }),
       headers: {
         "Content-Type": "application/json",
