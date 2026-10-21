@@ -60,8 +60,14 @@ export class GearGoalsPage extends BaseElement {
   async load() {
     try {
       this.goals = await api.getGearGoals();
+      this.error.innerHTML = "";
     } catch (err) {
+      // A backend without the /gear-goals endpoint answers with something
+      // that isn't JSON, so this is the normal failure when the site is
+      // newer than the server -- say so instead of silently rendering an
+      // empty list, which looks identical to "nothing is tracked yet".
       console.error("Failed to load gear goals", err);
+      this.error.innerHTML = "Could not load tracked gear from the server";
       return;
     }
     this.renderTable();
@@ -114,10 +120,15 @@ export class GearGoalsPage extends BaseElement {
       return;
     }
 
-    this.itemInput.value = "";
     this.itemList.innerHTML = "";
+    const response = await api.addGearGoal(itemId, target);
+    if (!response.ok) {
+      this.error.innerHTML = `Could not track that item (server returned ${response.status})`;
+      return;
+    }
+
+    this.itemInput.value = "";
     this.targetInput.value = 1;
-    await api.addGearGoal(itemId, target);
     await this.load();
   }
 
