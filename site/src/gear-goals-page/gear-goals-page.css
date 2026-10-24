@@ -18,20 +18,29 @@ gear-goals-page {
   width: 90px;
 }
 
-.gear-goals-page__table {
+/* The stockpile panel sits beside the grid like the spreadsheet it replaces,
+   and drops under it once there is no room for both. */
+.gear-goals-page__layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.gear-goals-page__table {
+  flex: 1;
+  min-width: 320px;
   overflow-x: auto;
 }
 
 .gear-goals-page__grid {
   border-collapse: collapse;
-  width: 100%;
 }
 
 .gear-goals-page__grid th,
 .gear-goals-page__grid td {
   border: 1px solid var(--light-border);
-  padding: 2px 8px;
   text-align: center;
   white-space: nowrap;
 }
@@ -39,36 +48,77 @@ gear-goals-page {
 .gear-goals-page__grid th {
   font-weight: normal;
   opacity: 0.8;
+  padding: 2px 6px;
+  /* Member names are far wider than a 36px icon column, so they lie on their
+     side -- otherwise five members stretch the grid past any screen. */
+  writing-mode: vertical-rl;
+  height: 90px;
 }
 
-.gear-goals-page__item-header,
-.gear-goals-page__item {
-  text-align: left;
+.gear-goals-page__grid th:last-child {
+  writing-mode: horizontal-tb;
+  height: auto;
 }
 
-.gear-goals-page__item-cell {
+/* One icon per member per item: green behind the ones they hold, which is the
+   whole read of the page at a glance. */
+.gear-goals-page__cell {
+  width: 40px;
+  height: 36px;
+  padding: 0;
+}
+
+.gear-goals-page__cell item-box {
+  height: 32px;
+  width: 36px;
+  opacity: 0.25;
+}
+
+.gear-goals-page__cell--have {
+  background-color: rgba(13, 193, 13, 0.45);
+}
+
+.gear-goals-page__cell--have item-box {
+  opacity: 1;
+}
+
+.gear-goals-page__count {
+  padding: 0 8px;
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+
+.gear-goals-page__stockpiles:not(:empty) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.gear-goals-page__stockpile {
+  border: 1px solid var(--light-border);
+  padding: 6px 8px;
+}
+
+.gear-goals-page__stockpile-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 6px;
 }
 
-.gear-goals-page__item item-box {
+.gear-goals-page__stockpile-head item-box {
   height: 32px;
   width: 36px;
   flex-shrink: 0;
 }
 
-.gear-goals-page__cell--have {
-  background-color: rgba(13, 193, 13, 0.35);
-  color: var(--primary-text);
-}
-
-.gear-goals-page__progress {
-  min-width: 140px;
+.gear-goals-page__stockpile-name {
+  flex: 1;
 }
 
 .gear-goals-page__bar {
-  height: 8px;
+  height: 14px;
   background-color: var(--darken);
   border: 1px solid var(--light-border);
 }
@@ -76,6 +126,10 @@ gear-goals-page {
 .gear-goals-page__bar-fill {
   height: 100%;
   background-color: var(--orange);
+}
+
+.gear-goals-page__remove {
+  padding: 0 6px;
 }
 
 .gear-goals-page__empty {

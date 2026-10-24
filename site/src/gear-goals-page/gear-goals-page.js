@@ -36,10 +36,12 @@ export class GearGoalsPage extends BaseElement {
     this.addButton = this.querySelector(".gear-goals-page__add");
     this.error = this.querySelector(".gear-goals-page__error");
     this.table = this.querySelector(".gear-goals-page__table");
+    this.stockpiles = this.querySelector(".gear-goals-page__stockpiles");
+    this.layout = this.querySelector(".gear-goals-page__layout");
 
     this.eventListener(this.itemInput, "input", this.handleItemSearch.bind(this));
     this.eventListener(this.addButton, "click", this.handleAdd.bind(this));
-    this.eventListener(this.table, "click", this.handleTableClick.bind(this));
+    this.eventListener(this.layout, "click", this.handleTableClick.bind(this));
 
     this.renderTable();
 
@@ -134,7 +136,7 @@ export class GearGoalsPage extends BaseElement {
 
   async handleTableClick(event) {
     if (!event.target.classList.contains("gear-goals-page__remove")) return;
-    const id = parseInt(event.target.closest("tr").dataset.id, 10);
+    const id = parseInt(event.target.closest("[data-id]").dataset.id, 10);
     this.goals = this.goals.filter((goal) => goal.id !== id);
     this.renderTable();
     await api.deleteGearGoal(id);
@@ -155,66 +157,81 @@ export class GearGoalsPage extends BaseElement {
     });
   }
 
+  // Two shapes, as the spreadsheet had them: a target of 1 is a "who still
+  // needs this piece" row in the icon grid, anything higher is a group
+  // stockpile (shards, plates, components) and gets a bar in the side panel.
   renderTable() {
-    if (this.goals.length === 0) {
-      this.table.innerHTML = `<div class="gear-goals-page__empty">Nothing tracked yet -- search for an item above.</div>`;
+    const members = this.memberNames();
+    const checklist = this.goals.filter((goal) => goal.target_quantity === 1);
+    const stockpiles = this.goals.filter((goal) => goal.target_quantity > 1);
+
+    this.stockpiles.innerHTML = stockpiles.map(GearGoalsPage.stockpileHtml).join("");
+
+    if (checklist.length === 0) {
+      this.table.innerHTML = stockpiles.length
+        ? ""
+        : `<div class="gear-goals-page__empty">Nothing tracked yet -- search for an item above.</div>`;
       return;
     }
 
-    const members = this.memberNames();
     const header = members.map((name) => `<th>${escapeHtml(name)}</th>`).join("");
-    const rows = this.goals.map((goal) => GearGoalsPage.rowHtml(goal, members)).join("");
+    const rows = checklist.map((goal) => GearGoalsPage.rowHtml(goal, members)).join("");
 
     this.table.innerHTML = `
 <table class="gear-goals-page__grid">
   <thead>
-    <tr><th class="gear-goals-page__item-header">Item</th>${header}<th>Progress</th><th></th></tr>
+    <tr>${header}<th></th></tr>
   </thead>
   <tbody>${rows}</tbody>
 </table>`;
   }
 
-  // A target of 1 is a "who still needs this piece" row: every member gets a
-  // tick or a blank, and progress counts members. Anything higher is a
-  // stockpile (shards, plates, components), where what matters is the group
-  // total against the target, so the cells show counts instead.
+  // One icon per member, green behind whoever holds it. The item is named by
+  // its icon rather than a text column, which is what keeps the grid dense
+  // enough to take in at a glance.
   static rowHtml(goal, members) {
-    const target = goal.target_quantity;
-    let total = 0;
-    let haveCount = 0;
-    let cells = "";
-
-    for (const name of members) {
-      const quantity = goal.quantities[name] || 0;
-      total += quantity;
-      if (quantity > 0) haveCount += 1;
-      cells += `<td class="gear-goals-page__cell ${quantity > 0 ? "gear-goals-page__cell--have" : ""}">${
-        quantity > 0 ? (target > 1 ? quantity.toLocaleString() : "&check;") : ""
-      }</td>`;
-    }
-
-    const [current, goalTotal] = target > 1 ? [total, target] : [haveCount, members.length];
-    const ratio = goalTotal > 0 ? Math.min(current / goalTotal, 1) : 0;
     // An id the catalog no longer knows about (tracked before an item data
     // update) still gets a row with its quantities -- item-box would throw
     // looking up the image for it.
     const details = Item.itemDetails[goal.item_id];
+    const label = escapeHtml(details ? details.name : `Item ${goal.item_id}`);
+    const icon = details
+      ? `<item-box item-id="${goal.item_id}" item-quantity="1" no-tooltip></item-box>`
+      : `<span>?</span>`;
+
+    let haveCount = 0;
+    let cells = "";
+    for (const name of members) {
+      const have = (goal.quantities[name] || 0) > 0;
+      if (have) haveCount += 1;
+      cells += `<td class="gear-goals-page__cell ${
+        have ? "gear-goals-page__cell--have" : ""
+      }" title="${label} -- ${escapeHtml(name)}">${icon}</td>`;
+    }
 
     return `
 <tr data-id="${goal.id}">
-  <td class="gear-goals-page__item">
-    <div class="gear-goals-page__item-cell">
-      ${details ? `<item-box item-id="${goal.item_id}" item-quantity="1" no-tooltip></item-box>` : ""}
-      <span>${escapeHtml(details ? details.name : `Item ${goal.item_id}`)}</span>
-    </div>
-  </td>
   ${cells}
-  <td class="gear-goals-page__progress">
-    <div class="gear-goals-page__bar"><div class="gear-goals-page__bar-fill" style="width: ${ratio * 100}%"></div></div>
-    <span>${current.toLocaleString()} / ${goalTotal.toLocaleString()}</span>
-  </td>
-  <td><button type="button" class="gear-goals-page__remove men-button small">Remove</button></td>
+  <td class="gear-goals-page__count">${haveCount} / ${members.length}</td>
+  <td><button type="button" class="gear-goals-page__remove men-button small" title="Stop tracking ${label}">x</button></td>
 </tr>`;
+  }
+
+  static stockpileHtml(goal) {
+    const details = Item.itemDetails[goal.item_id];
+    const total = Object.values(goal.quantities).reduce((sum, quantity) => sum + quantity, 0);
+    const ratio = Math.min(total / goal.target_quantity, 1);
+
+    return `
+<div class="gear-goals-page__stockpile" data-id="${goal.id}">
+  <div class="gear-goals-page__stockpile-head">
+    ${details ? `<item-box item-id="${goal.item_id}" item-quantity="1" no-tooltip></item-box>` : ""}
+    <span class="gear-goals-page__stockpile-name">${escapeHtml(details ? details.name : `Item ${goal.item_id}`)}</span>
+    <span>${total.toLocaleString()} / ${goal.target_quantity.toLocaleString()}</span>
+    <button type="button" class="gear-goals-page__remove men-button small">x</button>
+  </div>
+  <div class="gear-goals-page__bar"><div class="gear-goals-page__bar-fill" style="width: ${ratio * 100}%"></div></div>
+</div>`;
   }
 }
 
