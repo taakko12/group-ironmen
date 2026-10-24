@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findMonster } from "../src/engine";
-import { planSwitches } from "../src/switches";
+import { budgetCurve, fewestSwitchesFor, planSwitches } from "../src/switches";
 
 const TWISTED_BOW = 20997;
 const DRAGON_ARROW = 11212;
@@ -123,5 +123,96 @@ describe("planSwitches", () => {
 
   it("refuses to plan for nothing", () => {
     expect(() => planSwitches(POOL, [], { maxSwitches: 2 })).toThrow(/no targets/i);
+  });
+});
+
+// Locking is a constraint the planner may not trade away, not a preference.
+// Camping crystal body/legs + oath helm means those slots are settled: never
+// searched, never swapped, and therefore never costing an inventory space.
+describe("locked slots", () => {
+  const CRYSTAL_BODY = 23975;
+  const CRYSTAL_LEGS = 23979;
+
+  it("wears the locked piece against every monster", () => {
+    const plan = planSwitches([...POOL, CRYSTAL_BODY, CRYSTAL_LEGS], TARGETS, {
+      ...OPTS,
+      maxSwitches: 6,
+      lockedIds: [CRYSTAL_BODY, CRYSTAL_LEGS],
+    });
+
+    expect(plan.worn.body).toBe("Crystal body");
+    expect(plan.worn.legs).toBe("Crystal legs");
+    // Locked slots never appear as something you carry or swap into.
+    for (const item of plan.carried) expect(["body", "legs"]).not.toContain(item.slot);
+    for (const entry of plan.perMonster) {
+      expect(entry.swapsFromWorn).not.toContain("Crystal body");
+      expect(entry.swapsFromWorn).not.toContain("Crystal legs");
+    }
+  });
+
+  it("spends the budget elsewhere rather than on the camped slots", () => {
+    const locked = planSwitches([...POOL, CRYSTAL_BODY, CRYSTAL_LEGS], TARGETS, {
+      ...OPTS,
+      maxSwitches: 4,
+      lockedIds: [CRYSTAL_BODY, CRYSTAL_LEGS],
+    });
+
+    expect(locked.switches).toBeLessThanOrEqual(4);
+    expect(locked.carried.every((c) => c.slot !== "body" && c.slot !== "legs")).toBe(true);
+  });
+
+  it("rules out two-handers when the shield slot is locked", () => {
+    const plan = planSwitches(POOL, TARGETS, {
+      ...OPTS,
+      maxSwitches: 4,
+      lockedIds: [DRAGON_DEFENDER],
+    });
+
+    expect(plan.worn.shield).toBe("Dragon defender");
+    for (const entry of plan.perMonster) expect(entry.weapon).not.toBe("Twisted bow");
+  });
+
+  it("says so when a lock makes the pool unusable", () => {
+    expect(() =>
+      planSwitches([TWISTED_BOW, DRAGON_ARROW, DRAGON_DEFENDER], TARGETS, {
+        ...OPTS,
+        maxSwitches: 2,
+        lockedIds: [DRAGON_DEFENDER],
+      })
+    ).toThrow(/one-handed/i);
+  });
+
+  it("refuses to lock something that is not equipment", () => {
+    expect(() => planSwitches(POOL, TARGETS, { ...OPTS, maxSwitches: 2, lockedIds: [995] })).toThrow(
+      /cannot lock/i
+    );
+  });
+});
+
+// "Budget of 4" and "fewest I can get away with" are different questions.
+describe("budgetCurve", () => {
+  it("returns one plan per budget, none exceeding its own cap", () => {
+    const steps = budgetCurve(POOL, TARGETS, { ...OPTS, maxSwitches: 3 });
+
+    expect(steps.map((s) => s.budget)).toEqual([0, 1, 2, 3]);
+    for (const step of steps) expect(step.plan.switches).toBeLessThanOrEqual(step.budget);
+  });
+
+  it("never reports a negative marginal, since a bigger budget cannot hurt", () => {
+    const steps = budgetCurve(POOL, TARGETS, { ...OPTS, maxSwitches: 3 });
+
+    for (const step of steps) expect(step.marginal).toBeGreaterThanOrEqual(-1e-9);
+  });
+
+  it("picks the smallest budget that gives up nothing worth having", () => {
+    const steps = budgetCurve(POOL, TARGETS, { ...OPTS, maxSwitches: 4 });
+    const fewest = fewestSwitchesFor(steps, 0.05);
+    const best = Math.max(...steps.map((s) => s.plan.score));
+
+    expect(fewest.plan.score).toBeGreaterThanOrEqual(best - 0.05);
+    // Nothing cheaper would have done.
+    for (const step of steps.filter((s) => s.budget < fewest.budget)) {
+      expect(step.plan.score).toBeLessThan(best - 0.05);
+    }
   });
 });

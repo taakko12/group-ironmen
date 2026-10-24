@@ -14,7 +14,7 @@
 import { AmmoApplicability, ammoApplicability } from "@/lib/Equipment";
 import { Monster } from "@/types/Monster";
 import { EquipmentPiece, Player, PlayerEquipment } from "@/types/Player";
-import { buildPlayer, equippableBySlot, evaluate, LoadoutInput } from "./engine";
+import { buildPlayer, equipmentById, equippableBySlot, evaluate, LoadoutInput } from "./engine";
 
 /** Slots the search fills once the weapon is chosen, in no significant order. */
 const FILLABLE: (keyof PlayerEquipment)[] = [
@@ -31,6 +31,15 @@ const FILLABLE: (keyof PlayerEquipment)[] = [
 ];
 
 export interface SearchOptions extends Omit<LoadoutInput, "itemIds"> {
+  /**
+   * Item ids whose slots are settled -- gear you have decided to camp.
+   *
+   * These are not a hint, they are a constraint: the slot is never searched
+   * and never swapped, so it can never cost an inventory space. That is the
+   * point. Armour switches are rarely worth a click mid-fight even when the
+   * DPS says otherwise, and locking body/legs/head is how you say so.
+   */
+  lockedIds?: number[];
   /** Cap on weapons tried, best-effort for latency. Omit to try every one. */
   maxWeapons?: number;
   /** Swap passes after the greedy fill. Two is enough in practice. */
@@ -85,10 +94,30 @@ export function topLoadouts(
 }
 
 function loadoutsPerWeapon(ownedIds: Iterable<number>, monster: Monster, options: SearchOptions = {}): SearchResult[] {
-  const { maxWeapons, passes = 2, ...loadout } = options;
+  const { maxWeapons, passes = 2, lockedIds = [], ...loadout } = options;
   const bySlot = equippableBySlot(ownedIds);
-  const weapons = bySlot.weapon ?? [];
-  if (weapons.length === 0) throw new Error("no equippable weapon in the pool");
+
+  const locked = new Map<string, EquipmentPiece>();
+  for (const id of lockedIds) {
+    const piece = equipmentById(id);
+    if (!piece) throw new Error(`cannot lock item ${id}: not equipment the calculator knows`);
+    locked.set(piece.slot, piece);
+  }
+
+  // A locked weapon means there is nothing to enumerate. A locked shield rules
+  // out every two-hander, because buildPlayer would quietly drop the shield to
+  // make room -- which would break the lock without saying so.
+  const lockedWeapon = locked.get("weapon");
+  let weapons = lockedWeapon ? [lockedWeapon] : (bySlot.weapon ?? []);
+  if (locked.has("shield")) weapons = weapons.filter((weapon) => !weapon.isTwoHanded);
+
+  if (weapons.length === 0) {
+    throw new Error(
+      locked.has("shield")
+        ? "no one-handed weapon in the pool, and the shield slot is locked"
+        : "no equippable weapon in the pool"
+    );
+  }
 
   let evaluated = 0;
   const score = (ids: number[]): number => {
@@ -101,9 +130,15 @@ function loadoutsPerWeapon(ownedIds: Iterable<number>, monster: Monster, options
   for (const weapon of maxWeapons ? weapons.slice(0, maxWeapons) : weapons) {
     // A two-hander frees nothing into the shield slot, so skip it entirely
     // rather than scoring shields that will be silently dropped.
-    const slots = FILLABLE.filter((slot) => !(slot === "shield" && weapon.isTwoHanded));
+    const slots = FILLABLE.filter(
+      (slot) => !(slot === "shield" && weapon.isTwoHanded) && !locked.has(slot)
+    );
     const chosen = new Map<keyof PlayerEquipment, EquipmentPiece>();
-    const idsNow = () => [weapon.id, ...[...chosen.values()].map((p) => p.id)];
+    // Locked pieces ride along in every loadout without ever being searched.
+    const lockedHere = [...locked.entries()]
+      .filter(([slot]) => slot !== "weapon" && !(slot === "shield" && weapon.isTwoHanded))
+      .map(([, piece]) => piece.id);
+    const idsNow = () => [weapon.id, ...lockedHere, ...[...chosen.values()].map((p) => p.id)];
 
     // Greedy fill: take each slot's best contribution against what is already
     // worn. Order matters a little and we accept that -- the swap pass below

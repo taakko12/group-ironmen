@@ -146,6 +146,47 @@ export function planSwitches(
   return describe(repair(beam[0], order, targets, owned, maxSwitches, search), order, targets);
 }
 
+export interface BudgetStep {
+  budget: number;
+  plan: SwitchPlan;
+  /** DPS this budget buys over the one below it. */
+  marginal: number;
+}
+
+/**
+ * Every budget from 0 to `maxSwitches`, with what each extra slot buys.
+ *
+ * "Give me a budget of 4" and "what is the fewest I can get away with" are
+ * different questions, and only this one answers the second. Switches are not
+ * free in practice -- every one is a slot of brews and a click mid-fight -- so
+ * the useful output is the curve, letting whoever is asking see that (say) the
+ * third slot is worth 0.4 dps and the fourth is worth 0.02, and stop.
+ *
+ * Costs a full plan per budget, so it is a "work out my setup" call, not
+ * something to run on every page load.
+ */
+export function budgetCurve(
+  ownedIds: Iterable<number>,
+  targets: MonsterTarget[],
+  options: SwitchOptions
+): BudgetStep[] {
+  const owned = [...ownedIds];
+  const steps: BudgetStep[] = [];
+
+  for (let budget = 0; budget <= options.maxSwitches; budget += 1) {
+    const plan = planSwitches(owned, targets, { ...options, maxSwitches: budget });
+    steps.push({ budget, plan, marginal: budget === 0 ? 0 : plan.score - steps[budget - 1].plan.score });
+  }
+
+  return steps;
+}
+
+/** The smallest budget within `tolerance` dps of the best one on offer. */
+export function fewestSwitchesFor(steps: BudgetStep[], tolerance = 0.05): BudgetStep {
+  const best = Math.max(...steps.map((s) => s.plan.score));
+  return steps.find((s) => s.plan.score >= best - tolerance) ?? steps[steps.length - 1];
+}
+
 /**
  * Spend the budget the beam left on the table.
  *
@@ -174,6 +215,11 @@ function repair(
       const weight = targets[order[step]].weight ?? 1;
       const pick = current.picks[step];
       const held = new Set(pick.itemIds);
+      // Repair must not undo the user's own decisions: a locked slot is
+      // settled, and swapping it back out is exactly what locking forbids.
+      const lockedSlots = new Set(
+        (search.lockedIds ?? []).map((id) => equipmentById(id)?.slot).filter(Boolean) as string[]
+      );
 
       let bestIds: number[] | null = null;
       let bestDps = pick.dps;
@@ -181,7 +227,7 @@ function repair(
       for (const id of owned) {
         if (held.has(id)) continue;
         const slot = equipmentById(id)?.slot;
-        if (!slot) continue;
+        if (!slot || lockedSlots.has(slot)) continue;
 
         // Replace whatever occupies that slot, or fill it if empty.
         const ids = pick.itemIds.filter((existing) => equipmentById(existing)?.slot !== slot).concat(id);
