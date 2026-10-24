@@ -2,12 +2,12 @@ use crate::auth_middleware::Authenticated;
 use crate::db;
 use crate::error::ApiError;
 use crate::models::{
-    AddGearGoal, AddGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData,
-    GroupGearGoals, GroupGoals,
+    AddGearGoal, AmIInGroupRequest, GoalId, GroupBankPingData, GroupDeathData,
+    GroupGearGoals,
     GroupLootData, GroupMember, GroupSkillData, GroupStorageLog, LivePush, MustBankItem,
     NameChange, NewDeath, NewLootDrop, NewStorageLogEntry, PendingBankPing,
     MemberBossKcData, RenameGroupMember, RequestBank, RequestBankBatch, SetBankPingsEnabled,
-    SetGoalDone, SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls,
+    SetMemberColor, SetMemberDiscordId, StaleAttachments, UpdateAttachmentUrls,
     WomPlayerGains, SHARED_MEMBER,
 };
 use crate::validators::{valid_hex_color, valid_name, validate_member_prop_length, ArrayFormat};
@@ -592,57 +592,6 @@ pub async fn set_bank_pings_enabled(
 ) -> Result<HttpResponse, Error> {
     let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
     db::set_bank_pings_enabled(&client, auth.group_id, body.enabled).await?;
-    Ok(HttpResponse::Ok().finish())
-}
-
-#[get("/goals")]
-pub async fn get_goals(
-    auth: Authenticated,
-    db_pool: web::Data<Pool>,
-) -> Result<web::Json<GroupGoals>, Error> {
-    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    let goals = db::get_goals(&client, auth.group_id).await?;
-    Ok(web::Json(goals))
-}
-
-#[post("/goals")]
-pub async fn add_goal(
-    auth: Authenticated,
-    body: web::Json<AddGoal>,
-    db_pool: web::Data<Pool>,
-) -> Result<HttpResponse, Error> {
-    let description = body.description.trim();
-    if description.is_empty() || description.len() > 200 {
-        return Ok(HttpResponse::BadRequest().body("description must be 1-200 characters"));
-    }
-    if body.added_by.trim().is_empty() {
-        return Ok(HttpResponse::BadRequest().body("added_by is required"));
-    }
-
-    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    db::add_goal(&client, auth.group_id, description, &body.added_by).await?;
-    Ok(HttpResponse::Created().finish())
-}
-
-#[put("/goal-done")]
-pub async fn set_goal_done(
-    auth: Authenticated,
-    body: web::Json<SetGoalDone>,
-    db_pool: web::Data<Pool>,
-) -> Result<HttpResponse, Error> {
-    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    db::set_goal_done(&client, auth.group_id, body.id, body.done).await?;
-    Ok(HttpResponse::Ok().finish())
-}
-
-#[delete("/goals")]
-pub async fn delete_goal(
-    auth: Authenticated,
-    body: web::Json<GoalId>,
-    db_pool: web::Data<Pool>,
-) -> Result<HttpResponse, Error> {
-    let client: Client = db_pool.get().await.map_err(ApiError::PoolError)?;
-    db::delete_goal(&client, auth.group_id, body.id).await?;
     Ok(HttpResponse::Ok().finish())
 }
 
