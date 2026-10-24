@@ -15,22 +15,23 @@ describe("SkillGraph.datesForPeriod", () => {
     const cases = [
       {
         period: "Day",
-        count: 24,
+        // 96 fifteen-minute buckets, not 24 hourly ones, since 64e3819ec.
+        count: 96,
         now: "2026-11-01T23:30:00",
         nextDate: (date) => {
           const t = new Date(date);
-          t.setTime(t.getTime() + 3600000);
+          t.setTime(t.getTime() + 900000);
           return t;
         },
       },
       {
         period: "Week",
-        count: 7,
+        // Likewise hourly over 7 days rather than 7 daily buckets.
+        count: 168,
         now: "2026-11-02T23:30:00",
         nextDate: (date) => {
           const t = new Date(date);
-          t.setDate(t.getDate() + 1);
-          t.setHours(0, 0, 0, 0);
+          t.setTime(t.getTime() + 3600000);
           return t;
         },
       },
@@ -77,8 +78,11 @@ describe("SkillGraph.datesForPeriod", () => {
     const graph = new SkillGraph();
     const labels = graph.labelsForPeriod("InvalidPeriod", dates);
 
-    expect(dates).toHaveLength(24);
-    expect(labels).toHaveLength(24);
+    // A day is 96 buckets, not 24: 64e3819ec moved the Day period to 15-minute
+    // steps. One label per bucket is the actual contract here -- the point of
+    // the test is that an unknown period falls back to Day at all.
+    expect(dates).toHaveLength(96);
+    expect(labels).toHaveLength(dates.length);
   });
 
   it("keeps year buckets stable for month-end dates", () => {

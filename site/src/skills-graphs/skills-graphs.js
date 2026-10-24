@@ -24,6 +24,7 @@ export class SkillsGraphs extends BaseElement {
     super.connectedCallback();
     this.render();
     this.period = "Day";
+    this.chartGeneration = 0;
 
     this.chartContainer = this.querySelector(".skills-graphs__chart-container");
     this.periodButtons = this.querySelectorAll(".skills-graphs__period-btn");
@@ -60,7 +61,13 @@ export class SkillsGraphs extends BaseElement {
     this.subscribeOnce("get-group-data", this.createChart.bind(this));
   }
 
+  // Switching period twice in a row leaves two of these in flight, and whoever
+  // resolves last wins -- which is not necessarily the period whose button is
+  // lit. Each run claims a generation and drops out if a newer one started
+  // while it was awaiting, so a slow 1Y response can no longer land on top of
+  // the 24H the user has since clicked.
   async createChart() {
+    const generation = ++this.chartGeneration;
     const loader = document.createElement("div");
     loader.classList.add("skills-graphs__loader");
     loader.classList.add("loader");
@@ -68,6 +75,7 @@ export class SkillsGraphs extends BaseElement {
 
     try {
       const [skillDataForGroup] = await Promise.all([api.getSkillData(this.period), this.waitForChartjs()]);
+      if (generation !== this.chartGeneration) return;
       skillDataForGroup.sort((a, b) => a.name.localeCompare(b.name));
       skillDataForGroup.forEach((playerSkillData) => {
         playerSkillData.skill_data.forEach((x) => {
@@ -90,6 +98,9 @@ export class SkillsGraphs extends BaseElement {
       this.chartContainer.appendChild(skillGraph);
     } catch (err) {
       console.error(err);
+      // Same reason as above: a superseded request failing must not wipe out
+      // the chart the newer one just drew.
+      if (generation !== this.chartGeneration) return;
       this.chartContainer.innerHTML = `Failed to load ${err}`;
     }
   }
