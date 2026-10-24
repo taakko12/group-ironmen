@@ -19,8 +19,7 @@ gear-goals-page {
   max-width: 420px;
 }
 
-.gear-goals-page__search-input,
-.gear-goals-page__target-input {
+.gear-goals-page__search-input {
   background: transparent;
   border: none;
   color: inherit;
@@ -30,24 +29,14 @@ gear-goals-page {
   width: 100%;
 }
 
-.gear-goals-page__search-input:focus,
-.gear-goals-page__target-input:focus {
+.gear-goals-page__search-input:focus {
   outline: none;
-}
-
-.gear-goals-page__target {
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.gear-goals-page__target-input {
-  width: 4.5em;
-  text-align: center;
 }
 
 .gear-goals-page__hint {
   opacity: 0.5;
   font-size: 0.85em;
+  max-width: 34em;
 }
 
 /* Item picker ------------------------------------------------------------- */
@@ -167,6 +156,18 @@ gear-goals-page {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.gear-goals-page__target {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.gear-goals-page__target-label {
+  opacity: 0.55;
+  font-size: 0.8em;
 }
 
 .gear-goals-page__card-target {

@@ -38,7 +38,6 @@ export class GearGoalsPage extends BaseElement {
 
     this.searchInput = this.querySelector(".gear-goals-page__search-input");
     this.resultsEl = this.querySelector(".gear-goals-page__results");
-    this.targetInput = this.querySelector(".gear-goals-page__target-input");
     this.error = this.querySelector(".gear-goals-page__error");
     this.board = this.querySelector(".gear-goals-page__board");
 
@@ -185,7 +184,10 @@ export class GearGoalsPage extends BaseElement {
     this.track(parseInt(result.dataset.itemId, 10));
   }
 
-  async track(itemId, target = parseInt(this.targetInput.value, 10)) {
+  // Everything starts as one-per-member; the only way to get a stockpile is to
+  // raise that goal's own target, which reads unambiguously because the input
+  // sits beside the count it drives.
+  async track(itemId, target = 1) {
     this.error.innerHTML = "";
     if (isNaN(target) || target < 1) {
       this.error.innerHTML = "Target must be at least 1";
@@ -318,8 +320,11 @@ export class GearGoalsPage extends BaseElement {
   <div class="gear-goals-page__members">${chips}</div>
   <div class="gear-goals-page__actions">
     <div class="gear-goals-page__bar"><div class="gear-goals-page__bar-fill" style="width: ${ratio * 100}%"></div></div>
-    <input type="number" class="gear-goals-page__card-target" min="1" value="${goal.target_quantity}"
-           title="Target for ${name} -- 1 means every member needs one" />
+    <label class="gear-goals-page__target">
+      <span class="gear-goals-page__target-label">target</span>
+      <input type="number" class="gear-goals-page__card-target" min="1" value="${goal.target_quantity}"
+             title="1 means every member needs one of these; higher pools the group's total instead" />
+    </label>
     <button type="button" class="gear-goals-page__remove men-button small" title="Stop tracking ${name}">&times;</button>
   </div>
 </div>`;
