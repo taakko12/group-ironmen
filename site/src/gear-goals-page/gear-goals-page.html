@@ -1,17 +1,22 @@
-<div class="gear-goals-page__form men-control-container rsborder-tiny rsbackground">
-  <input
-    type="text"
-    class="gear-goals-page__item-input"
-    list="gear-goals-page__item-list"
-    placeholder="Item name..."
-    autocomplete="off"
-  />
-  <datalist id="gear-goals-page__item-list"></datalist>
-  <input type="number" class="gear-goals-page__target" min="1" value="1" title="Target quantity" />
-  <button type="button" class="gear-goals-page__add men-button small">Track</button>
+<div class="gear-goals-page__toolbar">
+  <div class="gear-goals-page__search men-control-container rsborder-tiny rsbackground">
+    <input
+      type="text"
+      class="gear-goals-page__search-input"
+      placeholder="Search for an item to track..."
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <div class="gear-goals-page__results rsborder-tiny rsbackground"></div>
+  </div>
+
+  <label class="gear-goals-page__target men-control-container rsborder-tiny rsbackground">
+    <span>Target</span>
+    <input type="number" class="gear-goals-page__target-input" min="1" value="1" />
+  </label>
+
+  <span class="gear-goals-page__hint">1 = everyone needs one &middot; more = group stockpile</span>
 </div>
+
 <div class="gear-goals-page__error validation-error"></div>
-<div class="gear-goals-page__layout">
-  <div class="gear-goals-page__table"></div>
-  <div class="gear-goals-page__stockpiles"></div>
-</div>
+<div class="gear-goals-page__board"></div>
