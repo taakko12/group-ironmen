@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Prayer } from "@/enums/Prayer";
-import { buildPlayer, dpsFor, equipmentById, equippableBySlot, findMonster } from "../src/engine";
+import { buildPlayer, dpsFor, equipmentById, equippableBySlot, findMonster, isUsableGear } from "../src/engine";
 
 // Item ids as they appear in our own members.equipment / members.bank arrays.
 const TWISTED_BOW = 20997;
@@ -107,5 +107,34 @@ describe("dps", () => {
 
   it("throws on an unknown monster rather than returning zero", () => {
     expect(() => dpsFor({ itemIds: MAX_RANGED }, "Gerald")).toThrow(/unknown monster/i);
+  });
+});
+
+// The catalog puts things in the weapon slot that are not weapons -- greegrees,
+// crates of fish, a Christmas dinner -- and never gave them an attack speed.
+// speed -1 becomes a one-tick weapon, the fastest in the game, so a search
+// will hand you a monkey greegree over a scythe and be right to by its own
+// arithmetic. This is what stops that.
+describe("unusable gear", () => {
+  const GREEGREE = 4030;
+  const CRATE_OF_FISH = 32451;
+
+  it("knows a greegree is not a weapon", () => {
+    expect(equipmentById(GREEGREE)?.speed).toBeLessThanOrEqual(0);
+    expect(isUsableGear(equipmentById(GREEGREE)!)).toBe(false);
+    expect(isUsableGear(equipmentById(CRATE_OF_FISH)!)).toBe(false);
+  });
+
+  it("keeps real weapons and all non-weapons", () => {
+    expect(isUsableGear(equipmentById(TWISTED_BOW)!)).toBe(true);
+    expect(isUsableGear(equipmentById(MASORI_BODY_F)!)).toBe(true);
+    // Zero speed is meaningless outside the weapon slot and must not exclude.
+    expect(equipmentById(11322)?.slot).not.toBe("weapon");
+  });
+
+  it("keeps them out of a search pool entirely", () => {
+    const bySlot = equippableBySlot([GREEGREE, CRATE_OF_FISH, TWISTED_BOW]);
+
+    expect(bySlot.weapon.map((p) => p.id)).toEqual([TWISTED_BOW]);
   });
 });

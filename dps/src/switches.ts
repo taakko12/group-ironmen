@@ -17,7 +17,7 @@
 // first boss happily spends the whole budget on gear nothing else wants.
 import { Monster } from "@/types/Monster";
 import { SearchOptions, SearchResult, topLoadouts } from "./search";
-import { buildPlayer, equipmentById, evaluate } from "./engine";
+import { buildPlayer, equipmentById, evaluate, isUsableGear } from "./engine";
 
 export interface MonsterTarget {
   monster: Monster;
@@ -228,8 +228,12 @@ function repair(
 
       for (const id of owned) {
         if (held.has(id)) continue;
-        const slot = equipmentById(id)?.slot;
-        if (!slot || lockedSlots.has(slot)) continue;
+        const piece = equipmentById(id);
+        // Same guard as the candidate search: repair must not sneak a
+        // one-tick greegree in through the back door.
+        if (!piece || !isUsableGear(piece)) continue;
+        const slot = piece.slot;
+        if (lockedSlots.has(slot)) continue;
 
         // Replace whatever occupies that slot, or fill it if empty.
         const ids = pick.itemIds.filter((existing) => equipmentById(existing)?.slot !== slot).concat(id);
@@ -334,8 +338,11 @@ function describe(plan: Plan, order: number[], targets: MonsterTarget[]): Switch
       const slot = equipmentById(id)?.slot;
       if (slot && wornId[slot] !== id) swaps.push(equipmentById(id)!.name);
     }
+    // Name alone is ambiguous: a raid boss has a row per phase and three
+    // lines all reading "Great Olm" tell you nothing about which is which.
+    const target = targets[targetIndex].monster;
     return {
-      monster: targets[targetIndex].monster.name,
+      monster: target.version ? `${target.name} (${target.version})` : target.name,
       dps: loadout.dps,
       weapon: loadout.gear.weapon ?? "unarmed",
       swapsFromWorn: swaps,

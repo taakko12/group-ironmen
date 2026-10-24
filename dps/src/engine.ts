@@ -29,12 +29,26 @@ export function equipmentById(itemId: number): EquipmentPiece | undefined {
   return byId.get(itemId);
 }
 
-/** Every id we own that the calculator recognises as equippable, by slot. */
+/**
+ * Whether a piece is something a search may consider.
+ *
+ * The catalog carries things that occupy the weapon slot but are not weapons
+ * -- greegrees, crates of fish, a Christmas dinner -- and the wiki has never
+ * given them a real attack speed. `speed: -1` becomes a one-tick weapon, the
+ * fastest rate in the game, so an optimiser hands you a monkey greegree over
+ * a scythe and is right to by its own arithmetic. 29 weapon-slot entries have
+ * a speed of 0 or less; none of them are weapons.
+ */
+export function isUsableGear(piece: EquipmentPiece): boolean {
+  return piece.slot !== "weapon" || (typeof piece.speed === "number" && piece.speed > 0);
+}
+
+/** Every id we own that the calculator recognises as usable equipment, by slot. */
 export function equippableBySlot(itemIds: Iterable<number>): Record<string, EquipmentPiece[]> {
   const bySlot: Record<string, EquipmentPiece[]> = {};
   for (const id of itemIds) {
     const piece = byId.get(id);
-    if (!piece) continue;
+    if (!piece || !isUsableGear(piece)) continue;
     (bySlot[piece.slot] ||= []).push(piece);
   }
   return bySlot;

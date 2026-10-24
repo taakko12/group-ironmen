@@ -78,8 +78,10 @@ describe("planSwitches", () => {
   it("reports a line per target", () => {
     const plan = planSwitches(POOL, TARGETS, { ...OPTS, maxSwitches: 4 });
 
+    // Versioned bosses are labelled "Name (Version)" so a raid's phases are
+    // tellable apart.
     expect(plan.perMonster.map((m) => m.monster).sort()).toEqual(
-      TARGETS.map((t) => t.monster.name).sort()
+      TARGETS.map((t) => (t.monster.version ? `${t.monster.name} (${t.monster.version})` : t.monster.name)).sort()
     );
   });
 
@@ -99,7 +101,7 @@ describe("planSwitches", () => {
 
     // With the demon dominating the weights, the single setup should be the
     // one the demon would have picked on its own.
-    expect(weighted.perMonster.find((m) => m.monster === "Abyssal demon")!.weapon).toBe(
+    expect(weighted.perMonster.find((m) => m.monster.startsWith("Abyssal demon"))!.weapon).toBe(
       demonOnly.perMonster[0].weapon
     );
   });
