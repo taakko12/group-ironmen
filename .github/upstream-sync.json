@@ -1,0 +1,13 @@
+{
+  "_comment": "State for .github/workflows/upstream-check.yml. Hand-edit `ported` when a decision is made about an upstream commit; the workflow maintains `data_synced_from` itself.",
+
+  "data_synced_from": "4d0b1b6c5f2a0f8c9438d2a57676556b0a4f9def",
+
+  "_ported_comment": "Upstream commits we have consciously dealt with. Their patch-ids diverged from ours (cherry-picked, rewritten, or superseded by our own work), so git merge-base keeps reporting them as missing forever. Listing them here keeps the weekly report down to things that genuinely need a decision.",
+  "ported": {
+    "88bf9095ef4d053da98f1ccfc436ceacaafd231a": "add map links -- cherry-picked as 2774c6c58",
+    "cc431d4454e8ae69f0513721f009ae582ae14eae": "potion storage site -- already in our tree",
+    "427b2a7585b7ed233f1c42037152850523f228f5": "potion storage server -- already in our tree",
+    "392fc12c93e01d22fbe46554ea1c71a81fd22801": "graphs page improvements -- we are ahead; took the chartGeneration guard in 109a6a9fc"
+  }
+}

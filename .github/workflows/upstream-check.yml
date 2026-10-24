@@ -1,38 +1,50 @@
-name: Check Upstream for Updates
+name: Weekly upstream sync
 
-# This fork has diverged from christoabrown/group-ironmen in several places
-# (custom per-member colors, collapsible skill-graph rows, checkbox line
-# filters, etc.), so new upstream commits generally need to be reviewed and
-# ported piece-by-piece rather than merged wholesale. This just flags when
-# there's something new to look at -- see reference_upstream_repo memory /
-# the "Compare" link in the opened issue for how to actually review it.
+# Two different jobs wear the same name "upstream has changes", and conflating
+# them is what let the item catalog go three months stale:
 #
-# The issue on its own turned out to have no teeth: it sat open and current
-# from 2026-07-27 to 2026-10-19 while the item catalog went three months
-# stale, because nobody reads a GitHub issue on a fork. So it also pings
-# Discord -- but only when the commit list actually changes, since a weekly
-# "still 13 commits behind" is the same noise the issue already was.
+#   1. Cache dumps. Upstream regenerates the game cache every Wednesday after
+#      the OSRS update. These are pure data, mechanical, and validated by
+#      cache-data.test.js -- there is no judgement in them, so this workflow
+#      syncs them itself and opens a PR rather than telling a human to run two
+#      commands every week. A chore on a weekly cadence always rots.
+#   2. Actual commits. This fork has diverged (per-member colors, banked XP,
+#      boss tracking, bank pings, gear goals, the egress work), so these need
+#      reading and porting piece-by-piece. That is the only part worth a ping.
+#
+# State lives in .github/upstream-sync.json: `data_synced_from` is maintained
+# here, `ported` is hand-edited when a decision is made about a commit.
 
 on:
   schedule:
-    # Thursdays: OSRS updates Wednesday and upstream's cache dump lands the
-    # same day, so this catches it the morning after rather than five days
-    # before the next one.
+    # Thursdays: the dump lands Wednesday, so this catches it the morning
+    # after rather than five days before the next one.
     - cron: '0 13 * * 4'
   workflow_dispatch: {}
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
+  pull-requests: write
 
 jobs:
-  check-upstream:
+  sync:
     runs-on: ubuntu-latest
-    # Job scope, not step scope: a step's own env block is not reliably visible
-    # to that same step's `if`, and silently evaluating to '' would skip the
-    # ping even once the secret is set.
     env:
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: cache-sync
+      # Deliberately not map_icons.json, map.json or map_links.json: our own
+      # commits carry changes in those, so a blind checkout would silently
+      # revert the clickable map transport links. Everything below is provably
+      # untouched by this fork (`git log master --not upstream/master -- <f>`
+      # is empty for each) and covered by cache-data.test.js.
+      DATA_PATHS: >-
+        site/public/data/item_data.json
+        site/public/data/quest_data.json
+        site/public/data/collection_log_info.json
+        site/public/data/collection_log_duplicates.json
+        site/public/data/map_labels.json
+        site/public/icons/items
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,117 +56,110 @@ jobs:
           git remote add upstream https://github.com/christoabrown/group-ironmen.git
           git fetch upstream master
 
-      - name: Diff against upstream
+      - name: Work out what is new
         id: diff
         run: |
-          MERGE_BASE=$(git merge-base HEAD upstream/master)
-          git log --oneline "$MERGE_BASE"..upstream/master > new_commits.txt
-          if [ -s new_commits.txt ]; then
-            echo "has_new=true" >> "$GITHUB_OUTPUT"
+          SYNCED=$(jq -r '.data_synced_from' .github/upstream-sync.json)
+          UPSTREAM_HEAD=$(git rev-parse upstream/master)
+          echo "upstream_head=$UPSTREAM_HEAD" >> "$GITHUB_OUTPUT"
+
+          # Commits we have never dealt with, minus the ones recorded as
+          # ported, minus the cache dumps (handled by syncing, not reading).
+          jq -r '.ported | keys[]' .github/upstream-sync.json | cut -c1-40 | sort > ported.txt
+          git log --format='%H %s' "$(git merge-base HEAD upstream/master)"..upstream/master \
+            | grep -viE 'cache outputs|data dump' > all_features.txt || true
+          awk 'NR==FNR{p[$1];next} !($1 in p)' ported.txt all_features.txt > features.txt || true
+
+          # Dumps newer than the data we last synced, so a refreshed catalog
+          # stops being reported as outstanding.
+          git log --oneline "$SYNCED"..upstream/master \
+            | grep -iE 'cache outputs|data dump' > dumps.txt || true
+
+          echo "feature_count=$(wc -l < features.txt)" >> "$GITHUB_OUTPUT"
+          echo "dump_count=$(wc -l < dumps.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Sync cache data from upstream
+        id: sync
+        run: |
+          git checkout upstream/master -- $DATA_PATHS
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "has_new=false" >> "$GITHUB_OUTPUT"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "files=$(git diff --cached --name-only | wc -l)" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Open or update tracking issue
-        id: issue
-        if: steps.diff.outputs.has_new == 'true'
-        uses: actions/github-script@v7
+      - name: Setup Node.js
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/setup-node@v4
         with:
-          script: |
-            const fs = require('fs');
-            const commits = fs.readFileSync('new_commits.txt', 'utf8').trim();
-            const title = 'Upstream has new commits to review';
-            const body = [
-              'christoabrown/group-ironmen (`upstream` remote) has commits not yet merged into this fork:',
-              '',
-              '```',
-              commits,
-              '```',
-              '',
-              'Compare: https://github.com/christoabrown/group-ironmen/commits/master',
-              '',
-              'To review locally:',
-              '```',
-              'git fetch upstream',
-              'git log --oneline $(git merge-base master upstream/master)..upstream/master',
-              '```',
-            ].join('\n');
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: site/package-lock.json
 
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'upstream-sync',
-            });
-            const existing = issues.find((issue) => issue.title === title);
-
-            let issueUrl;
-            // The stored issue body doubles as the "what did we last report"
-            // record, so no extra state is needed to tell a genuinely new
-            // commit from the same backlog a week later.
-            let changed = true;
-
-            if (existing) {
-              changed = (existing.body || '').trim() !== body.trim();
-              issueUrl = existing.html_url;
-              if (changed) {
-                await github.rest.issues.update({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: existing.number,
-                  body,
-                });
-              }
-            } else {
-              const { data: created } = await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title,
-                body,
-                labels: ['upstream-sync'],
-              });
-              issueUrl = created.html_url;
-            }
-
-            // A cache dump is a two-command catalog refresh; anything else is
-            // a feature to read before porting. Different jobs, so the ping
-            // counts them separately rather than just saying "N commits".
-            const lines = commits.split('\n').filter(Boolean);
-            const dumps = lines.filter((line) => /cache outputs|data dump/i.test(line));
-            const features = lines.filter((line) => !/cache outputs|data dump/i.test(line));
-
-            const parts = [];
-            if (dumps.length) parts.push(`**${dumps.length}** cache dump${dumps.length === 1 ? '' : 's'}`);
-            if (features.length) {
-              parts.push(`**${features.length}** other commit${features.length === 1 ? '' : 's'}`);
-            }
-
-            const detail = features.slice(0, 10).map((line) => `- \`${line}\``).join('\n');
-            core.setOutput('changed', String(changed));
-            core.setOutput(
-              'message',
-              [
-                `:inbox_tray: Upstream has ${parts.join(' and ')} not in this fork.`,
-                detail && `\n${detail}`,
-                dumps.length
-                  ? '\nCatalog refresh: `git fetch upstream && git checkout upstream/master -- site/public/data/item_data.json site/public/icons/items`'
-                  : '',
-                `\n<${issueUrl}>`,
-              ]
-                .filter(Boolean)
-                .join('\n')
-                .slice(0, 1900)
-            );
-
-      # Skipped entirely when the secret is unset, so the job keeps passing on
-      # a fork that has no Discord to post to.
-      - name: Ping Discord
-        if: steps.issue.outputs.changed == 'true' && env.DISCORD_WEBHOOK_URL != ''
-        env:
-          MESSAGE: ${{ steps.issue.outputs.message }}
+      # The gate. Upstream runs these same tests on their own dump PRs, so a
+      # failure here means the dump is bad rather than that we are behind --
+      # no PR gets opened and the ping says so.
+      - name: Validate the synced data
+        if: steps.sync.outputs.changed == 'true'
+        working-directory: site
         run: |
-          # --fail so a 4xx from Discord fails the job instead of passing
-          # silently, which is the exact failure mode this whole step exists
-          # to correct.
-          jq -n --arg content "$MESSAGE" '{content: $content, allowed_mentions: {parse: []}}' \
+          npm ci
+          npm test -- cache-data.test.js
+
+      - name: Open or update the catalog PR
+        id: pr
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          REV=$(git log -1 --format='%s' upstream/master | grep -oE 'rev [0-9]+' || echo 'unknown rev')
+          jq --arg sha "${{ steps.diff.outputs.upstream_head }}" '.data_synced_from = $sha' \
+            .github/upstream-sync.json > tmp.json && mv tmp.json .github/upstream-sync.json
+
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore: sync upstream cache data ($REV)" \
+            -m "Automated by .github/workflows/upstream-check.yml. Data only -- item catalog, quests, collection log and map labels, validated by cache-data.test.js before this was opened." \
+            -m "Synced from christoabrown/group-ironmen@${{ steps.diff.outputs.upstream_head }}"
+          git push -f origin "$BRANCH"
+
+          # A PR already open just took the force-push; creating a second one
+          # is the only thing that needs guarding.
+          URL=$(gh pr list --head "$BRANCH" --state open --json url -q '.[0].url')
+          if [ -z "$URL" ]; then
+            URL=$(gh pr create --head "$BRANCH" --base master \
+              --title "chore: sync upstream cache data ($REV)" \
+              --body "Catalog refresh from upstream, data files only. \`cache-data.test.js\` passed before this opened. Merging makes new items searchable on the gear page and nameable in bank pings.")
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Build the report
+        id: report
+        run: |
+          {
+            if [ "${{ steps.sync.outputs.changed }}" = 'true' ]; then
+              printf ':package: Catalog refresh ready: **%s** files from upstream, validated. Merge to ship it.\n%s\n' \
+                "${{ steps.sync.outputs.files }}" "${{ steps.pr.outputs.url }}"
+            fi
+            if [ "${{ steps.diff.outputs.feature_count }}" -gt 0 ]; then
+              printf '\n:eyes: **%s** upstream commit(s) need a decision:\n' "${{ steps.diff.outputs.feature_count }}"
+              head -10 features.txt | while read -r sha subject; do
+                printf -- '- `%s` %s\n' "$(echo "$sha" | cut -c1-9)" "$subject"
+              done
+              printf 'Record what you decide in `.github/upstream-sync.json`.\n'
+            fi
+          } > message.txt
+          if [ -s message.txt ]; then
+            echo "has_message=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_message=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ping Discord
+        if: steps.report.outputs.has_message == 'true' && env.DISCORD_WEBHOOK_URL != ''
+        run: |
+          # --fail so a dead webhook breaks the build loudly instead of going
+          # quiet, which is the failure this whole thing exists to correct.
+          jq -Rs '{content: .[0:1900], allowed_mentions: {parse: []}}' message.txt \
             | curl --fail --silent --show-error -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK_URL"
