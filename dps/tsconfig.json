@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    // The vendored tree is full of `@/lib/...` self-references, so the alias
+    // has to resolve to vendor/ rather than src/.
+    "baseUrl": ".",
+    "paths": { "@/*": ["vendor/*"] }
+  },
+  "include": ["src/**/*.ts", "vendor/**/*.ts"],
+  "exclude": [".calc-checkout", "dist", "node_modules"]
+}

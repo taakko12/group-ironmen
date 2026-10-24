@@ -1,0 +1,27 @@
+{
+  "name": "dps",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DPS engine wrapping the OSRS Wiki calculator's math, fed from our own group's gear",
+  "license": "GPL-3.0",
+  "scripts": {
+    "vendor": "node scripts/vendor.mjs",
+    "build": "npm run vendor && tsc",
+    "test": "npm run vendor && vitest run",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.4",
+    "d3-array": "^3.2.4",
+    "lodash.mergewith": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/d3-array": "^3.2.1",
+    "@types/lodash.mergewith": "^4.6.9",
+    "@types/node": "^20.14.0",
+    "type-fest": "^4.10.2",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.1"
+  }
+}
