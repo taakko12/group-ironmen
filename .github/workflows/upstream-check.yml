@@ -6,10 +6,19 @@ name: Check Upstream for Updates
 # ported piece-by-piece rather than merged wholesale. This just flags when
 # there's something new to look at -- see reference_upstream_repo memory /
 # the "Compare" link in the opened issue for how to actually review it.
+#
+# The issue on its own turned out to have no teeth: it sat open and current
+# from 2026-07-27 to 2026-10-19 while the item catalog went three months
+# stale, because nobody reads a GitHub issue on a fork. So it also pings
+# Discord -- but only when the commit list actually changes, since a weekly
+# "still 13 commits behind" is the same noise the issue already was.
 
 on:
   schedule:
-    - cron: '0 13 * * 1' # Mondays 13:00 UTC
+    # Thursdays: OSRS updates Wednesday and upstream's cache dump lands the
+    # same day, so this catches it the morning after rather than five days
+    # before the next one.
+    - cron: '0 13 * * 4'
   workflow_dispatch: {}
 
 permissions:
@@ -19,6 +28,11 @@ permissions:
 jobs:
   check-upstream:
     runs-on: ubuntu-latest
+    # Job scope, not step scope: a step's own env block is not reliably visible
+    # to that same step's `if`, and silently evaluating to '' would skip the
+    # ping even once the secret is set.
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +56,7 @@ jobs:
           fi
 
       - name: Open or update tracking issue
+        id: issue
         if: steps.diff.outputs.has_new == 'true'
         uses: actions/github-script@v7
         with:
@@ -73,19 +88,73 @@ jobs:
             });
             const existing = issues.find((issue) => issue.title === title);
 
+            let issueUrl;
+            // The stored issue body doubles as the "what did we last report"
+            // record, so no extra state is needed to tell a genuinely new
+            // commit from the same backlog a week later.
+            let changed = true;
+
             if (existing) {
-              await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existing.number,
-                body,
-              });
+              changed = (existing.body || '').trim() !== body.trim();
+              issueUrl = existing.html_url;
+              if (changed) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing.number,
+                  body,
+                });
+              }
             } else {
-              await github.rest.issues.create({
+              const { data: created } = await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title,
                 body,
                 labels: ['upstream-sync'],
               });
+              issueUrl = created.html_url;
             }
+
+            // A cache dump is a two-command catalog refresh; anything else is
+            // a feature to read before porting. Different jobs, so the ping
+            // counts them separately rather than just saying "N commits".
+            const lines = commits.split('\n').filter(Boolean);
+            const dumps = lines.filter((line) => /cache outputs|data dump/i.test(line));
+            const features = lines.filter((line) => !/cache outputs|data dump/i.test(line));
+
+            const parts = [];
+            if (dumps.length) parts.push(`**${dumps.length}** cache dump${dumps.length === 1 ? '' : 's'}`);
+            if (features.length) {
+              parts.push(`**${features.length}** other commit${features.length === 1 ? '' : 's'}`);
+            }
+
+            const detail = features.slice(0, 10).map((line) => `- \`${line}\``).join('\n');
+            core.setOutput('changed', String(changed));
+            core.setOutput(
+              'message',
+              [
+                `:inbox_tray: Upstream has ${parts.join(' and ')} not in this fork.`,
+                detail && `\n${detail}`,
+                dumps.length
+                  ? '\nCatalog refresh: `git fetch upstream && git checkout upstream/master -- site/public/data/item_data.json site/public/icons/items`'
+                  : '',
+                `\n<${issueUrl}>`,
+              ]
+                .filter(Boolean)
+                .join('\n')
+                .slice(0, 1900)
+            );
+
+      # Skipped entirely when the secret is unset, so the job keeps passing on
+      # a fork that has no Discord to post to.
+      - name: Ping Discord
+        if: steps.issue.outputs.changed == 'true' && env.DISCORD_WEBHOOK_URL != ''
+        env:
+          MESSAGE: ${{ steps.issue.outputs.message }}
+        run: |
+          # --fail so a 4xx from Discord fails the job instead of passing
+          # silently, which is the exact failure mode this whole step exists
+          # to correct.
+          jq -n --arg content "$MESSAGE" '{content: $content, allowed_mentions: {parse: []}}' \
+            | curl --fail --silent --show-error -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK_URL"
