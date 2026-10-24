@@ -129,11 +129,16 @@ jobs:
             -m "Synced from christoabrown/group-ironmen@${{ steps.diff.outputs.upstream_head }}"
           git push -f origin "$BRANCH"
 
+          # -R is not optional on a fork: gh defaults a PR's base repo to the
+          # parent, so without it this tries to open the PR against
+          # christoabrown/group-ironmen and dies on "Resource not accessible
+          # by integration".
+          #
           # A PR already open just took the force-push; creating a second one
           # is the only thing that needs guarding.
-          URL=$(gh pr list --head "$BRANCH" --state open --json url -q '.[0].url')
+          URL=$(gh pr list -R "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json url -q '.[0].url')
           if [ -z "$URL" ]; then
-            URL=$(gh pr create --head "$BRANCH" --base master \
+            URL=$(gh pr create -R "$GITHUB_REPOSITORY" --head "$BRANCH" --base master \
               --title "chore: sync upstream cache data ($REV)" \
               --body "Catalog refresh from upstream, data files only. \`cache-data.test.js\` passed before this opened. Merging makes new items searchable on the gear page and nameable in bank pings.")
           fi
