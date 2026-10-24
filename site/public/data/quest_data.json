@@ -482,11 +482,30 @@
     "points": "1",
     "member": true
   },
+  "16971": {
+    "name": "A Ruff Situation",
+    "difficulty": "Novice",
+    "points": "1",
+    "member": true
+  },
+  "16972": {
+    "name": "Crab Quest",
+    "difficulty": "Intermediate",
+    "points": "1",
+    "member": true
+  },
   "17": {
     "name": "Cook's Assistant",
     "difficulty": "Novice",
     "points": "1",
     "member": false
+  },
+  "17027": {
+    "name": "The Fractured Archive",
+    "difficulty": "Grandmaster",
+    "points": "0",
+    "member": true,
+    "miniquest": true
   },
   "18": {
     "name": "The Corsair Curse",
@@ -1112,6 +1131,12 @@
     "points": "2",
     "member": true,
     "hidden": true
+  },
+  "7133": {
+    "name": "Fallen From Grace",
+    "difficulty": "Experienced",
+    "points": "2",
+    "member": true
   },
   "72": {
     "name": "Heroes' Quest",

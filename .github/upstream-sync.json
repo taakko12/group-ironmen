@@ -1,8 +1,6 @@
 {
   "_comment": "State for .github/workflows/upstream-check.yml. Hand-edit `ported` when a decision is made about an upstream commit; the workflow maintains `data_synced_from` itself.",
-
   "data_synced_from": "4d0b1b6c5f2a0f8c9438d2a57676556b0a4f9def",
-
   "_ported_comment": "Upstream commits we have consciously dealt with. Their patch-ids diverged from ours (cherry-picked, rewritten, or superseded by our own work), so git merge-base keeps reporting them as missing forever. Listing them here keeps the weekly report down to things that genuinely need a decision.",
   "ported": {
     "88bf9095ef4d053da98f1ccfc436ceacaafd231a": "add map links -- cherry-picked as 2774c6c58",
