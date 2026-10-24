@@ -9,7 +9,9 @@
 const { SYSTEM_PROMPT } = require('./personality');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
+// qwen3.6-27b was decommissioned; 3.8 is its successor and still the only
+// model on Groq that takes an image (input_modalities: text, image).
+const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b';
 const ROAST_CHANCE = Number(process.env.DEATH_ROAST_CHANCE ?? 0.3);
 
 async function generateRoast(imageUrl) {
@@ -36,7 +38,7 @@ async function generateRoast(imageUrl) {
       ],
       max_tokens: 120,
       temperature: 1.0,
-      // qwen3.6 is a reasoning model and defaults to spending its output
+      // qwen3.8 is a reasoning model and defaults to spending its output
       // budget on a <think> block instead of the actual line -- turn
       // thinking off entirely, and hide/strip any reasoning that slips
       // through anyway so message.content is just the roast.

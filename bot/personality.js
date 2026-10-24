@@ -9,7 +9,9 @@
 const { getRsnForDiscordId } = require('./memberCache');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+// llama-3.3-70b-versatile was decommissioned on 2026-08-16; gpt-oss-120b is
+// Groq's own recommended replacement for it.
+const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const TRIGGER_CHANCE = Number(process.env.PERSONALITY_TRIGGER_CHANCE ?? 0);
 const COOLDOWN_MS = Number(process.env.PERSONALITY_COOLDOWN_MS ?? 30 * 1000);
 // Comma-separated channel IDs to allow this in; unset means every channel
@@ -61,6 +63,13 @@ async function callGroq(userContent) {
       ],
       max_tokens: 120,
       temperature: 1.0,
+      // gpt-oss reasons by default and will spend all 120 tokens on the
+      // thinking block, leaving message.content empty -- which this returns
+      // as null, i.e. the bot silently says nothing. Unlike the qwen vision
+      // model, gpt-oss rejects reasoning_effort 'none' (low/medium/high
+      // only), so this is the floor; 'low' lands the reply in ~38 tokens.
+      reasoning_effort: 'low',
+      reasoning_format: 'hidden',
     }),
   });
   if (!response.ok) {

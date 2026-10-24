@@ -22,7 +22,10 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 // just reliable function calling, which the smaller instant model still
 // does (and the tool_use_failed retry-without-tools fallback below still
 // covers it if it doesn't).
-const GROQ_TOOLS_MODEL = process.env.GROQ_TOOLS_MODEL || 'llama-3.1-8b-instant';
+// llama-3.1-8b-instant went the same way as the 70b; gpt-oss-20b is the
+// cheapest model Groq still lists that supports tools and structured output,
+// which is all this loop needs.
+const GROQ_TOOLS_MODEL = process.env.GROQ_TOOLS_MODEL || 'openai/gpt-oss-20b';
 const MAX_TOOL_ROUNDS = 4;
 const SHARED_MEMBER_NAME = '@SHARED';
 
@@ -174,6 +177,11 @@ async function callGroqWithTools(messages, { allowTools = true } = {}) {
       ...(allowTools ? { tools, tool_choice: 'auto' } : {}),
       max_tokens: 400,
       temperature: 0.7,
+      // See personality.js: gpt-oss burns the token budget on reasoning and
+      // returns empty content otherwise. Tool calls survive it either way,
+      // but the final answer round does not.
+      reasoning_effort: 'low',
+      reasoning_format: 'hidden',
     }),
   });
 
