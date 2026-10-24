@@ -17,7 +17,7 @@
 // first boss happily spends the whole budget on gear nothing else wants.
 import { Monster } from "@/types/Monster";
 import { SearchOptions, SearchResult, topLoadouts } from "./search";
-import { buildPlayer, equipmentById, evaluate, isUsableGear } from "./engine";
+import { attackStyleOf, AttackStyle, buildPlayer, equipmentById, evaluate, isUsableGear } from "./engine";
 
 export interface MonsterTarget {
   monster: Monster;
@@ -26,6 +26,14 @@ export interface MonsterTarget {
    * you want to weight it. Defaults to 1, i.e. plain average DPS.
    */
   weight?: number;
+  /**
+   * Ways of attacking that work on this target. Omit for all three.
+   *
+   * This is per target, not per plan: at Olm you melee one claw and must
+   * range or mage the head, and a planner told only "melee is fine" will
+   * cheerfully hand you a halberd for a phase you cannot reach.
+   */
+  styles?: AttackStyle[];
 }
 
 export interface SwitchOptions extends SearchOptions {
@@ -109,7 +117,9 @@ export function planSwitches(
   if (targets.length === 0) throw new Error("no targets to plan for");
 
   const owned = [...ownedIds];
-  const candidates = targets.map((t) => topLoadouts(owned, t.monster, search, candidatesPerMonster));
+  const candidates = targets.map((t) =>
+    topLoadouts(owned, t.monster, { ...search, allowedStyles: t.styles }, candidatesPerMonster)
+  );
 
   // Hardest monster first. The early picks shape what the budget gets spent
   // on, so the boss with the most to lose from a compromise should choose
@@ -129,8 +139,26 @@ export function planSwitches(
       // such thing as a compromise setup: every monster insists on what suits
       // it alone, and a tight budget has no feasible plan at all even when
       // "wear one thing everywhere" plainly works.
-      const reuse = plan.picks.map((pick) => rescore(pick, targets[index].monster, search));
-      for (const loadout of [...candidates[index], ...reuse]) {
+      const reuse = plan.picks
+        .filter((pick) => allowedHere(pick, targets[index].styles))
+        .map((pick) => rescore(pick, targets[index].monster, search));
+
+      // Keep everything, change only the weapon. Candidates are each a full
+      // re-optimisation, so the cheapest real option -- camp the armour and
+      // bring one other weapon -- is not among them. Without this, a boss that
+      // must be meleed while the rest are ranged has no plan at all under a
+      // small budget, when in fact one spare weapon covers it.
+      const weaponSwaps = plan.picks.flatMap((pick) =>
+        weaponsFor(owned, targets[index].styles).map((weaponId) =>
+          rescore(
+            { ...pick, itemIds: [...pick.itemIds.filter((id) => equipmentById(id)?.slot !== "weapon"), weaponId] },
+            targets[index].monster,
+            search
+          )
+        )
+      );
+
+      for (const loadout of [...candidates[index], ...reuse, ...weaponSwaps]) {
         const picks = [...plan.picks, loadout];
         if (switchCost(picks) > maxSwitches) continue;
         next.push({ used: merge(plan.used, loadout), score: plan.score + weight * loadout.dps, picks });
@@ -234,6 +262,8 @@ function repair(
         if (!piece || !isUsableGear(piece)) continue;
         const slot = piece.slot;
         if (lockedSlots.has(slot)) continue;
+        const styles = targets[order[step]].styles;
+        if (slot === "weapon" && styles?.length && !styles.includes(attackStyleOf(piece))) continue;
 
         // Replace whatever occupies that slot, or fill it if empty.
         const ids = pick.itemIds.filter((existing) => equipmentById(existing)?.slot !== slot).concat(id);
@@ -263,6 +293,23 @@ function repair(
   }
 
   return current;
+}
+
+/** Usable weapons in the pool that can hit a target with the allowed styles. */
+function weaponsFor(owned: number[], styles?: AttackStyle[]): number[] {
+  return owned.filter((id) => {
+    const piece = equipmentById(id);
+    if (!piece || piece.slot !== "weapon" || !isUsableGear(piece)) return false;
+    return !styles?.length || styles.includes(attackStyleOf(piece));
+  });
+}
+
+/** Whether a loadout's weapon is one this target can actually be hit with. */
+function allowedHere(loadout: SearchResult, styles?: AttackStyle[]): boolean {
+  if (!styles?.length) return true;
+  const weaponId = loadout.itemIds.find((id) => equipmentById(id)?.slot === "weapon");
+  const weapon = weaponId === undefined ? undefined : equipmentById(weaponId);
+  return weapon ? styles.includes(attackStyleOf(weapon)) : false;
 }
 
 /**

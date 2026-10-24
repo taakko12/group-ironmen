@@ -14,7 +14,7 @@
 import { AmmoApplicability, ammoApplicability } from "@/lib/Equipment";
 import { Monster } from "@/types/Monster";
 import { EquipmentPiece, Player, PlayerEquipment } from "@/types/Player";
-import { buildPlayer, equipmentById, equippableBySlot, evaluate, LoadoutInput } from "./engine";
+import { attackStyleOf, AttackStyle, buildPlayer, equipmentById, equippableBySlot, evaluate, LoadoutInput } from "./engine";
 
 /** Slots the search fills once the weapon is chosen, in no significant order. */
 const FILLABLE: (keyof PlayerEquipment)[] = [
@@ -40,6 +40,15 @@ export interface SearchOptions extends Omit<LoadoutInput, "itemIds"> {
    * DPS says otherwise, and locking body/legs/head is how you say so.
    */
   lockedIds?: number[];
+  /**
+   * Which ways of attacking are actually possible here. Omit for all three.
+   *
+   * No monster data says whether you can physically reach a target: Olm's
+   * head has real melee defence numbers and a halberd scores against them,
+   * but you cannot walk up to it. Reachability is a fact about the encounter,
+   * not about the monster's stats, so it has to be told to us.
+   */
+  allowedStyles?: AttackStyle[];
   /** Cap on weapons tried, best-effort for latency. Omit to try every one. */
   maxWeapons?: number;
   /** Swap passes after the greedy fill. Two is enough in practice. */
@@ -94,7 +103,7 @@ export function topLoadouts(
 }
 
 function loadoutsPerWeapon(ownedIds: Iterable<number>, monster: Monster, options: SearchOptions = {}): SearchResult[] {
-  const { maxWeapons, passes = 2, lockedIds = [], ...loadout } = options;
+  const { maxWeapons, passes = 2, lockedIds = [], allowedStyles, ...loadout } = options;
   const bySlot = equippableBySlot(ownedIds);
 
   const locked = new Map<string, EquipmentPiece>();
@@ -110,12 +119,14 @@ function loadoutsPerWeapon(ownedIds: Iterable<number>, monster: Monster, options
   const lockedWeapon = locked.get("weapon");
   let weapons = lockedWeapon ? [lockedWeapon] : (bySlot.weapon ?? []);
   if (locked.has("shield")) weapons = weapons.filter((weapon) => !weapon.isTwoHanded);
+  if (allowedStyles?.length) weapons = weapons.filter((weapon) => allowedStyles.includes(attackStyleOf(weapon)));
 
   if (weapons.length === 0) {
+    const why = allowedStyles?.length ? ` that attacks with ${allowedStyles.join(" or ")}` : "";
     throw new Error(
       locked.has("shield")
-        ? "no one-handed weapon in the pool, and the shield slot is locked"
-        : "no equippable weapon in the pool"
+        ? `no one-handed weapon in the pool${why}, and the shield slot is locked`
+        : `no weapon in the pool${why}`
     );
   }
 

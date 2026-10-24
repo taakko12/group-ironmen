@@ -9,7 +9,7 @@
 // browser never has to ship a bank across the wire to get a plan.
 import http from "node:http";
 import { Prayer } from "@/enums/Prayer";
-import { equipmentById, findMonster } from "./engine";
+import { AttackStyle, equipmentById, findMonster } from "./engine";
 import { budgetCurve, fewestSwitchesFor, MonsterTarget, planSwitches } from "./switches";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -90,10 +90,18 @@ async function handlePlan(body: Record<string, unknown>) {
   ];
 
   const targets: MonsterTarget[] = targetNames.map((entry) => {
-    const spec = typeof entry === "string" ? { name: entry } : (entry as { name: string; version?: string; weight?: number });
+    const spec =
+      typeof entry === "string"
+        ? { name: entry }
+        : (entry as { name: string; version?: string; weight?: number; styles?: AttackStyle[] });
     const monster = findMonster(spec.name, spec.version);
     if (!monster) throw new HttpError(400, `unknown monster "${spec.name}"`);
-    return { monster, weight: spec.weight };
+
+    const styles = (spec.styles ?? []).filter((s) => ["melee", "ranged", "magic"].includes(s));
+    if (spec.styles?.length && styles.length === 0) {
+      throw new HttpError(400, `styles must be melee, ranged or magic`);
+    }
+    return { monster, weight: spec.weight, styles: styles.length ? styles : undefined };
   });
 
   // Locks arrive as names: ids are not something anyone types by hand.

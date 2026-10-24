@@ -3,6 +3,10 @@ import { api } from "../data/api";
 import { Item } from "../data/item";
 
 const MIN_SEARCH_LENGTH = 2;
+// No monster data says whether you can physically reach a target: Olm's head
+// has real melee defence numbers and a halberd scores against them, but you
+// cannot walk up to it. So it is a per-boss input.
+const STYLES = ["melee", "ranged", "magic"];
 
 function escapeHtml(str) {
   const div = document.createElement("div");
@@ -94,7 +98,9 @@ export class DpsPage extends BaseElement {
 
     const match = this.results[parseInt(row.dataset.index, 10)];
     const already = this.targets.some((t) => t.name === match.name && t.version === match.version);
-    if (!already) this.targets.push({ name: match.name, version: match.version });
+    // All three styles on by default; you narrow them when a phase cannot be
+    // reached the obvious way.
+    if (!already) this.targets.push({ name: match.name, version: match.version, styles: [...STYLES] });
 
     this.monsterInput.value = "";
     this.resultsEl.classList.remove("dps-page__results--open");
@@ -102,8 +108,19 @@ export class DpsPage extends BaseElement {
   }
 
   handleTargetClick(event) {
-    if (!event.target.classList.contains("dps-page__chip-remove")) return;
-    this.targets.splice(parseInt(event.target.dataset.index, 10), 1);
+    const index = parseInt(event.target.dataset.index, 10);
+    if (event.target.classList.contains("dps-page__chip-remove")) {
+      this.targets.splice(index, 1);
+      this.renderTargets();
+      return;
+    }
+
+    if (!event.target.classList.contains("dps-page__style")) return;
+    const target = this.targets[index];
+    const style = event.target.dataset.style;
+    target.styles = target.styles.includes(style)
+      ? target.styles.filter((s) => s !== style)
+      : [...target.styles, style];
     this.renderTargets();
   }
 
@@ -120,12 +137,18 @@ export class DpsPage extends BaseElement {
 
   renderTargets() {
     this.targetsEl.innerHTML = this.targets
-      .map(
-        (target, index) =>
-          `<span class="dps-page__chip">${escapeHtml(target.name)}${
-            target.version ? ` <span class="dps-page__result-version">[${escapeHtml(target.version)}]</span>` : ""
-          }<span class="dps-page__chip-remove" data-index="${index}" title="Remove">&times;</span></span>`
-      )
+      .map((target, index) => {
+        const styles = STYLES.map(
+          (style) =>
+            `<span class="dps-page__style ${
+              target.styles.includes(style) ? "dps-page__style--on" : ""
+            }" data-index="${index}" data-style="${style}"
+             title="Can this be attacked with ${style}?">${style[0].toUpperCase()}</span>`
+        ).join("");
+        return `<span class="dps-page__chip">${escapeHtml(target.name)}${
+          target.version ? ` <span class="dps-page__result-version">[${escapeHtml(target.version)}]</span>` : ""
+        }${styles}<span class="dps-page__chip-remove" data-index="${index}" title="Remove">&times;</span></span>`;
+      })
       .join("");
   }
 

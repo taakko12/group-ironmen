@@ -43,6 +43,22 @@ export function isUsableGear(piece: EquipmentPiece): boolean {
   return piece.slot !== "weapon" || (typeof piece.speed === "number" && piece.speed > 0);
 }
 
+export type AttackStyle = "melee" | "ranged" | "magic";
+
+/**
+ * How a weapon attacks by default.
+ *
+ * Every category technically offers magic, because you can always cast a
+ * spell while holding anything, so the full style list is useless for saying
+ * what a weapon *is*. The default stance is what the search actually uses.
+ */
+export function attackStyleOf(piece: EquipmentPiece): AttackStyle {
+  const type = getDefaultCombatStyle((piece.category ?? EquipmentCategory.NONE) as EquipmentCategory)?.type;
+  if (type === "ranged") return "ranged";
+  if (type === "magic") return "magic";
+  return "melee";
+}
+
 /** Every id we own that the calculator recognises as usable equipment, by slot. */
 export function equippableBySlot(itemIds: Iterable<number>): Record<string, EquipmentPiece[]> {
   const bySlot: Record<string, EquipmentPiece[]> = {};

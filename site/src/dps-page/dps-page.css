@@ -200,3 +200,25 @@ dps-page {
   font-style: italic;
   padding: 10px 2px;
 }
+
+/* Which ways of attacking work on this boss. Off means the planner will not
+   consider a weapon of that kind for it, however well it scores. */
+.dps-page__style {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3em;
+  height: 1.3em;
+  margin-left: 2px;
+  border-radius: 3px;
+  border: 1px solid var(--light-border);
+  font-size: 0.8em;
+  cursor: pointer;
+  opacity: 0.35;
+}
+
+.dps-page__style--on {
+  opacity: 1;
+  border-color: var(--orange);
+  color: var(--orange);
+}

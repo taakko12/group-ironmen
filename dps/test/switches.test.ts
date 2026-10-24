@@ -218,3 +218,68 @@ describe("budgetCurve", () => {
     }
   });
 });
+
+// No monster data says whether you can physically reach a target. Olm's head
+// has real melee defence numbers and a halberd scores against them, but you
+// cannot walk up to it -- so reachability has to be an input.
+describe("per-target attack styles", () => {
+  const olm = (version: string, styles?: ("melee" | "ranged" | "magic")[]) => ({
+    monster: findMonster("Great Olm", version)!,
+    styles,
+  });
+
+  it("never picks a melee weapon for a target melee cannot reach", () => {
+    const plan = planSwitches([...POOL, 23975, 23979], [olm("Head (Normal)", ["ranged", "magic"])], {
+      ...OPTS,
+      maxSwitches: 2,
+    });
+
+    expect(plan.perMonster[0].weapon).not.toBe("Dragon scimitar");
+    expect(plan.perMonster[0].weapon).not.toBe("Emberlight");
+  });
+
+  it("restricts each phase independently", () => {
+    const plan = planSwitches(POOL, [olm("Head (Normal)", ["ranged"]), olm("Left claw (Normal)", ["melee"])], {
+      ...OPTS,
+      maxSwitches: 4,
+    });
+
+    const head = plan.perMonster.find((m) => m.monster.includes("Head"))!;
+    const claw = plan.perMonster.find((m) => m.monster.includes("Left claw"))!;
+    expect(head.weapon).toBe("Twisted bow");
+    expect(["Dragon scimitar", "Emberlight"]).toContain(claw.weapon);
+  });
+
+  it("says so when nothing in the pool can hit the target that way", () => {
+    expect(() => planSwitches([TWISTED_BOW, DRAGON_ARROW], [olm("Head (Normal)", ["melee"])], {
+      ...OPTS,
+      maxSwitches: 2,
+    })).toThrow(/melee/i);
+  });
+
+  it("leaves targets with no restriction free to use anything", () => {
+    const plan = planSwitches(POOL, [olm("Left claw (Normal)")], { ...OPTS, maxSwitches: 2 });
+    expect(plan.perMonster[0].weapon).toBeTruthy();
+  });
+
+  // Every candidate is a full re-optimisation, so "camp the armour, bring one
+  // other weapon" is not among them. Before weapon-swap candidates existed,
+  // a melee-only phase alongside ranged-only phases had no plan at all under
+  // a small budget -- even though one spare weapon plainly covers it.
+  it("finds a weapon-only swap when a full set would not fit", () => {
+    const plan = planSwitches(
+      POOL,
+      [
+        { monster: findMonster("Great Olm", "Head (Normal)")!, styles: ["ranged"] },
+        { monster: findMonster("Great Olm", "Right claw (Normal)")!, styles: ["melee"] },
+      ],
+      { ...OPTS, maxSwitches: 2 }
+    );
+
+    expect(plan.switches).toBeLessThanOrEqual(2);
+    const head = plan.perMonster.find((m) => m.monster.includes("Head"))!;
+    const claw = plan.perMonster.find((m) => m.monster.includes("Right claw"))!;
+    expect(head.weapon).toBe("Twisted bow");
+    expect(["Dragon scimitar", "Emberlight"]).toContain(claw.weapon);
+  });
+});

@@ -76,7 +76,7 @@ describe("bestLoadout", () => {
   });
 
   it("refuses a pool with nothing to swing", () => {
-    expect(() => bestLoadout([BARROWS_GLOVES, PEGASIAN_BOOTS], vorkath)).toThrow(/no equippable weapon/i);
+    expect(() => bestLoadout([BARROWS_GLOVES, PEGASIAN_BOOTS], vorkath)).toThrow(/no weapon in the pool/i);
   });
 
   it("reports how much work it did, so cost stays visible", () => {
