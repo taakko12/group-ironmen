@@ -63,10 +63,14 @@ describe("planSwitches", () => {
     expect(loose).toBeGreaterThan(tight);
   });
 
-  it("counts carried items as everything beyond one per slot", () => {
+  it("reports the budget as the worst fight's bag, not the starting spares", () => {
     const plan = planSwitches(POOL, TARGETS, { ...OPTS, maxSwitches: 8 });
 
-    expect(plan.carried).toHaveLength(plan.switches);
+    // `carried` is what you stow at the start; `switches` is the peak, which
+    // is higher whenever a setup leaves slots empty. Conflating the two is
+    // what made the old per-slot model undercount.
+    expect(plan.switches).toBe(Math.max(...plan.perMonster.map((m) => m.inBag)));
+    expect(plan.switches).toBeGreaterThanOrEqual(plan.carried.length);
     // A carried item is by definition not the one worn in that slot.
     for (const item of plan.carried) expect(plan.worn[item.slot]).not.toBe(item.name);
   });
@@ -98,6 +102,23 @@ describe("planSwitches", () => {
     expect(weighted.perMonster.find((m) => m.monster === "Abyssal demon")!.weapon).toBe(
       demonOnly.perMonster[0].weapon
     );
+  });
+
+  // Counting distinct items per slot says a shield used in only one setup is
+  // free. It is not: while the two-hander is equipped, that shield and its
+  // one-handed weapon are both sitting in the inventory.
+  it("charges for gear stowed while a two-hander is equipped", () => {
+    const plan = planSwitches(POOL, TARGETS, { ...OPTS, maxSwitches: 8 });
+
+    const brought = new Set<string>([...Object.values(plan.worn), ...plan.carried.map((c) => c.name)]);
+    const worstWorn = Math.min(
+      ...plan.perMonster.map((m) => Object.keys(plan.worn).length - m.swapsFromWorn.length)
+    );
+
+    // Whatever is not on your body is in your bag, so the budget must cover
+    // at least the spares, and more when a setup leaves a slot empty.
+    expect(plan.switches).toBeGreaterThanOrEqual(brought.size - Object.keys(plan.worn).length);
+    expect(worstWorn).toBeGreaterThan(0);
   });
 
   it("refuses to plan for nothing", () => {
