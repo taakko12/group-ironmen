@@ -67,7 +67,7 @@ export class GearGoalsPage extends BaseElement {
       // newer than the server -- say so instead of silently rendering an
       // empty list, which looks identical to "nothing is tracked yet".
       console.error("Failed to load gear goals", err);
-      this.error.innerHTML = "Could not load tracked gear from the server";
+      this.error.innerHTML = `Could not load tracked gear (${escapeHtml(err.message)})`;
       return;
     }
     this.renderTable();

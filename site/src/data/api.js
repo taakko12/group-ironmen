@@ -464,6 +464,10 @@ class Api {
         Authorization: this.groupToken,
       },
     });
+    // A failure body is not JSON, so without this the caller only ever sees a
+    // parse error and the status -- 401 vs 404 vs 500, which is the whole
+    // diagnosis -- is lost.
+    if (!response.ok) throw new Error(`server returned ${response.status}`);
     return response.json();
   }
 
