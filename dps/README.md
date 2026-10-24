@@ -61,3 +61,35 @@ during the first run: defaulting `onSlayerTask` to `false` in the shared
 baseline broke their slayer-helmet max-hit assertions, so the baseline stays
 faithful to upstream and our off-task policy is applied in `buildPlayer`
 instead.
+
+## Running a plan
+
+```
+npm install
+npm run plan -- --find vorkath
+npm run plan -- --member "T aak" --targets "Vorkath,Zulrah,General Graardor" --budget 4
+npm run plan -- --member "T aak" --targets "Vorkath,Zulrah" --curve
+npm run plan -- --member "T aak" --targets "Vorkath,Zulrah" --lock "Crystal body (Ithell)"
+```
+
+Needs `BACKEND_URL`, `GROUP_NAME` and `GROUP_TOKEN` — the same values the bot
+runs on — in `dps/.env` (gitignored) or the environment. Gear comes from the
+live group data, so a plan reflects what that member owns right now.
+
+| Flag | |
+|---|---|
+| `--find <text>` | Look a monster up. Names must match the wiki's exactly, including the `[version]` where one exists. |
+| `--member <name>` | Whose bank to plan from. |
+| `--targets <a,b,c>` | The boss list to optimise across, all at once. |
+| `--budget <n>` | Inventory slots the gear may take. Default 4. |
+| `--curve` | Every budget up to `--budget`, and what each extra slot buys. |
+| `--lock <names>` | Slots you have already decided. Never searched, never swapped, never costs a slot. |
+| `--weapons <n>` | Candidate weapons per monster. Higher is slower and better. Default 12. |
+
+Two things the output is not:
+
+- **Levels are assumed maxed.** Real levels are in `members.skills` and are not
+  wired in yet, so these numbers flatter anyone who is not maxed.
+- **Mechanics are not modelled.** It will suggest a halberd at Zulrah because
+  reach gives it nonzero DPS. Whether a fight is actually playable that way is
+  a judgement this does not make, and the same applies to raid phases.
