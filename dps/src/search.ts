@@ -63,6 +63,28 @@ function scored(player: Player, monster: Monster): number {
  * is "what should I bring tonight", not "what should I aspire to".
  */
 export function bestLoadout(ownedIds: Iterable<number>, monster: Monster, options: SearchOptions = {}): SearchResult {
+  const all = loadoutsPerWeapon(ownedIds, monster, options);
+  return all[0];
+}
+
+/**
+ * The best loadout for each candidate weapon, best first.
+ *
+ * One per weapon is a naturally diverse candidate set -- a different weapon
+ * drags different gear with it -- which is exactly what the switch planner
+ * needs. Taking the top N of a single weapon's neighbourhood would hand it N
+ * near-identical loadouts and no real choices.
+ */
+export function topLoadouts(
+  ownedIds: Iterable<number>,
+  monster: Monster,
+  options: SearchOptions = {},
+  limit = 10
+): SearchResult[] {
+  return loadoutsPerWeapon(ownedIds, monster, options).slice(0, limit);
+}
+
+function loadoutsPerWeapon(ownedIds: Iterable<number>, monster: Monster, options: SearchOptions = {}): SearchResult[] {
   const { maxWeapons, passes = 2, ...loadout } = options;
   const bySlot = equippableBySlot(ownedIds);
   const weapons = bySlot.weapon ?? [];
@@ -74,7 +96,7 @@ export function bestLoadout(ownedIds: Iterable<number>, monster: Monster, option
     return scored(buildPlayer({ ...loadout, itemIds: ids }), monster);
   };
 
-  let best: { dps: number; ids: number[] } = { dps: -1, ids: [] };
+  const results: { dps: number; ids: number[] }[] = [];
 
   for (const weapon of maxWeapons ? weapons.slice(0, maxWeapons) : weapons) {
     // A two-hander frees nothing into the shield slot, so skip it entirely
@@ -130,24 +152,20 @@ export function bestLoadout(ownedIds: Iterable<number>, monster: Monster, option
       if (!improved) break;
     }
 
-    if (current > best.dps) best = { dps: current, ids: idsNow() };
+    results.push({ dps: current, ids: idsNow() });
   }
 
-  const player = buildPlayer({ ...loadout, itemIds: best.ids });
-  const result = evaluate(player, monster);
-  const gear: Record<string, string> = {};
-  for (const [slot, piece] of Object.entries(player.equipment)) {
-    if (piece) gear[slot] = (piece as EquipmentPiece).name;
-  }
+  results.sort((a, b) => b.dps - a.dps);
 
-  return {
-    dps: result.dps,
-    maxHit: result.maxHit,
-    accuracy: result.accuracy,
-    itemIds: best.ids,
-    gear,
-    evaluated,
-  };
+  return results.map(({ ids }) => {
+    const player = buildPlayer({ ...loadout, itemIds: ids });
+    const result = evaluate(player, monster);
+    const gear: Record<string, string> = {};
+    for (const [slot, piece] of Object.entries(player.equipment)) {
+      if (piece) gear[slot] = (piece as EquipmentPiece).name;
+    }
+    return { dps: result.dps, maxHit: result.maxHit, accuracy: result.accuracy, itemIds: ids, gear, evaluated };
+  });
 }
 
 function isLegal(weapon: EquipmentPiece, slot: keyof PlayerEquipment, piece: EquipmentPiece): boolean {
