@@ -44,8 +44,10 @@ export interface SwitchPlan {
   switches: number;
   /** slot -> item worn at the start of the run. */
   worn: Record<string, string>;
+  /** slot -> item id, so callers can render the icon rather than the name. */
+  wornIds: Record<string, number>;
   /** The extra items, i.e. what actually costs inventory space. */
-  carried: { slot: string; name: string }[];
+  carried: { slot: string; name: string; itemId: number }[];
   perMonster: {
     monster: string;
     dps: number;
@@ -314,11 +316,11 @@ function describe(plan: Plan, order: number[], targets: MonsterTarget[]): Switch
     wornId[slot] = bestId;
   }
 
-  const carried: { slot: string; name: string }[] = [];
+  const carried: { slot: string; name: string; itemId: number }[] = [];
   for (const [slot, ids] of plan.used) {
     for (const id of ids) {
       if (id === wornId[slot]) continue;
-      carried.push({ slot, name: equipmentById(id)?.name ?? `Item ${id}` });
+      carried.push({ slot, name: equipmentById(id)?.name ?? `Item ${id}`, itemId: id });
     }
   }
 
@@ -345,6 +347,7 @@ function describe(plan: Plan, order: number[], targets: MonsterTarget[]): Switch
     score: plan.score / totalWeight,
     switches: switchCost(plan.picks),
     worn,
+    wornIds: wornId,
     carried,
     perMonster,
   };

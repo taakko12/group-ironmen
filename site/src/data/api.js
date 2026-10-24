@@ -65,6 +65,35 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/bank-pings-enabled`;
   }
 
+  // The DPS planner is its own service: the calculator maths it wraps is
+  // GPL-3.0 and this site is BSD, so it stays behind HTTP rather than being
+  // bundled in. Hardcoded for now -- unlike baseUrl it is not rewritten at
+  // build time, so changing it means changing this line.
+  get dpsUrl() {
+    return "https://dps-production.up.railway.app";
+  }
+
+  async dpsMonsters(query) {
+    const response = await fetch(`${this.dpsUrl}/monsters?q=${encodeURIComponent(query)}`, {
+      headers: { Authorization: this.groupToken },
+    });
+    if (!response.ok) throw new Error(`monster search returned ${response.status}`);
+    return (await response.json()).matches;
+  }
+
+  async dpsPlan(body) {
+    const response = await fetch(`${this.dpsUrl}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: this.groupToken },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json().catch(() => ({}));
+    // The service explains its own failures (unknown monster, item nobody
+    // owns, no plan fits), so surface that rather than a bare status code.
+    if (!response.ok) throw new Error(result.error || `planner returned ${response.status}`);
+    return result;
+  }
+
   get gearGoalsUrl() {
     return `${this.baseUrl}/group/${this.groupName}/gear-goals`;
   }

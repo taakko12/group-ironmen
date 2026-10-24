@@ -1,0 +1,30 @@
+<div class="dps-page__controls">
+  <div class="men-control-container rsborder-tiny rsbackground">
+    <select class="dps-page__member"></select>
+  </div>
+
+  <div class="dps-page__search men-control-container rsborder-tiny rsbackground">
+    <input
+      type="text"
+      class="dps-page__monster-input"
+      placeholder="Add a boss..."
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <div class="dps-page__results rsborder-tiny rsbackground"></div>
+  </div>
+
+  <label class="dps-page__budget men-control-container rsborder-tiny rsbackground">
+    <span>Switches</span>
+    <input type="number" class="dps-page__budget-input" min="0" max="10" value="4" />
+  </label>
+
+  <button type="button" class="dps-page__run men-button">Plan</button>
+  <button type="button" class="dps-page__curve men-button small" title="Show what each extra switch buys">
+    Curve
+  </button>
+</div>
+
+<div class="dps-page__targets"></div>
+<div class="dps-page__error validation-error"></div>
+<div class="dps-page__output"></div>
