@@ -65,18 +65,21 @@ jobs:
 
           # Commits we have never dealt with, minus the ones recorded as
           # ported, minus the cache dumps (handled by syncing, not reading).
-          jq -r '.ported | keys[]' .github/upstream-sync.json | cut -c1-40 | sort > ported.txt
+          # $RUNNER_TEMP, not the working tree: these are scratch, and the
+          # commit step stages by path from this same checkout.
+          jq -r '.ported | keys[]' .github/upstream-sync.json | cut -c1-40 | sort > "$RUNNER_TEMP/ported.txt"
           git log --format='%H %s' "$(git merge-base HEAD upstream/master)"..upstream/master \
-            | grep -viE 'cache outputs|data dump' > all_features.txt || true
-          awk 'NR==FNR{p[$1];next} !($1 in p)' ported.txt all_features.txt > features.txt || true
+            | grep -viE 'cache outputs|data dump' > "$RUNNER_TEMP/all_features.txt" || true
+          awk 'NR==FNR{p[$1];next} !($1 in p)' "$RUNNER_TEMP/ported.txt" "$RUNNER_TEMP/all_features.txt" \
+            > "$RUNNER_TEMP/features.txt" || true
 
           # Dumps newer than the data we last synced, so a refreshed catalog
           # stops being reported as outstanding.
           git log --oneline "$SYNCED"..upstream/master \
-            | grep -iE 'cache outputs|data dump' > dumps.txt || true
+            | grep -iE 'cache outputs|data dump' > "$RUNNER_TEMP/dumps.txt" || true
 
-          echo "feature_count=$(wc -l < features.txt)" >> "$GITHUB_OUTPUT"
-          echo "dump_count=$(wc -l < dumps.txt)" >> "$GITHUB_OUTPUT"
+          echo "feature_count=$(wc -l < "$RUNNER_TEMP/features.txt")" >> "$GITHUB_OUTPUT"
+          echo "dump_count=$(wc -l < "$RUNNER_TEMP/dumps.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Sync cache data from upstream
         id: sync
@@ -118,7 +121,9 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git checkout -b "$BRANCH"
-          git add -A
+          # By path, never -A: anything else in the tree is scratch from an
+          # earlier step and has no business in a data-only PR.
+          git add $DATA_PATHS .github/upstream-sync.json
           git commit -m "chore: sync upstream cache data ($REV)" \
             -m "Automated by .github/workflows/upstream-check.yml. Data only -- item catalog, quests, collection log and map labels, validated by cache-data.test.js before this was opened." \
             -m "Synced from christoabrown/group-ironmen@${{ steps.diff.outputs.upstream_head }}"
@@ -144,13 +149,13 @@ jobs:
             fi
             if [ "${{ steps.diff.outputs.feature_count }}" -gt 0 ]; then
               printf '\n:eyes: **%s** upstream commit(s) need a decision:\n' "${{ steps.diff.outputs.feature_count }}"
-              head -10 features.txt | while read -r sha subject; do
+              head -10 "$RUNNER_TEMP/features.txt" | while read -r sha subject; do
                 printf -- '- `%s` %s\n' "$(echo "$sha" | cut -c1-9)" "$subject"
               done
               printf 'Record what you decide in `.github/upstream-sync.json`.\n'
             fi
-          } > message.txt
-          if [ -s message.txt ]; then
+          } > "$RUNNER_TEMP/message.txt"
+          if [ -s "$RUNNER_TEMP/message.txt" ]; then
             echo "has_message=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_message=false" >> "$GITHUB_OUTPUT"
@@ -161,5 +166,5 @@ jobs:
         run: |
           # --fail so a dead webhook breaks the build loudly instead of going
           # quiet, which is the failure this whole thing exists to correct.
-          jq -Rs '{content: .[0:1900], allowed_mentions: {parse: []}}' message.txt \
+          jq -Rs '{content: .[0:1900], allowed_mentions: {parse: []}}' "$RUNNER_TEMP/message.txt" \
             | curl --fail --silent --show-error -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK_URL"
