@@ -23,7 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const UPSTREAM = "https://github.com/weirdgloop/osrs-dps-calc.git";
-const PINNED = "cf33e599ba95d5e3c11cef5856277774c8f949a8";
+const PINNED = "c446f2e1027a5d0f7ced0d961f3e5ee22fecf2e7";
 const COPY = ["src/lib", "src/types", "src/enums", "src/utils.ts", "src/tests"];
 const DATA = ["equipment.json", "monsters.json", "equipment_aliases.json", "spells.json"];
 

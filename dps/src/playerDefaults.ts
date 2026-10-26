@@ -33,6 +33,7 @@ export const MAXED_SKILLS: PlayerSkills = {
   str: 99,
   mining: 99,
   herblore: 99,
+  farming: 99,
 };
 
 export const NO_BOOSTS: PlayerSkills = {
@@ -45,6 +46,7 @@ export const NO_BOOSTS: PlayerSkills = {
   str: 0,
   mining: 0,
   herblore: 0,
+  farming: 0,
 };
 
 export function generateEmptyPlayer(name?: string): Player {
@@ -78,6 +80,13 @@ export function generateEmptyPlayer(name?: string): Player {
       // stance; ignored for everything else.
       chinchompaDistance: 4,
       usingSunfireRunes: false,
+      // The Fractured Archive's elemental spell upgrades, each +2 base max
+      // hit for its element. Off by default: they are unlocks, and assuming
+      // someone has them would quietly inflate every magic number.
+      fragmentOfWind: false,
+      fragmentOfWater: false,
+      fragmentOfEarth: false,
+      fragmentOfFire: false,
     },
     spell: null,
   };
