@@ -65,6 +65,48 @@ class Api {
     return `${this.baseUrl}/group/${this.groupName}/bank-pings-enabled`;
   }
 
+  async getStorageLog(since) {
+    const params = since ? `?since=${encodeURIComponent(since)}` : "";
+    const response = await fetch(`${this.baseUrl}/group/${this.groupName}/get-storage-log${params}`, {
+      headers: { Authorization: this.groupToken },
+    });
+    if (!response.ok) throw new Error(`storage log returned ${response.status}`);
+    return response.json();
+  }
+
+  // Takes no `since`: this endpoint returns the group's whole ping history
+  // (over a thousand entries already), so callers that want a window have to
+  // trim it themselves.
+  async getBankPingData() {
+    const response = await fetch(`${this.baseUrl}/group/${this.groupName}/get-bank-ping-data`, {
+      headers: { Authorization: this.groupToken },
+    });
+    if (!response.ok) throw new Error(`bank ping data returned ${response.status}`);
+    return response.json();
+  }
+
+  // The bot is a Discord client with a small read-only HTTP surface bolted on,
+  // so its command history and health are reachable without opening Railway.
+  get botUrl() {
+    return "https://jumane-bot-production.up.railway.app";
+  }
+
+  async getBotStatus() {
+    const response = await fetch(`${this.botUrl}/status`, {
+      headers: { Authorization: this.groupToken },
+    });
+    if (!response.ok) throw new Error(`bot status returned ${response.status}`);
+    return response.json();
+  }
+
+  async getBotLog(limit = 100) {
+    const response = await fetch(`${this.botUrl}/log?limit=${limit}`, {
+      headers: { Authorization: this.groupToken },
+    });
+    if (!response.ok) throw new Error(`bot log returned ${response.status}`);
+    return response.json();
+  }
+
   // The DPS planner is its own service: the calculator maths it wraps is
   // GPL-3.0 and this site is BSD, so it stays behind HTTP rather than being
   // bundled in. Hardcoded for now -- unlike baseUrl it is not rewritten at

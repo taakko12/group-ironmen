@@ -1,0 +1,115 @@
+jumane-page {
+  display: block;
+}
+
+.jumane-page__tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.jumane-page__output {
+  margin-top: 14px;
+}
+
+.jumane-page__table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.jumane-page__table th,
+.jumane-page__table td {
+  border: 1px solid var(--light-border);
+  padding: 3px 8px;
+  text-align: left;
+  font-weight: normal;
+  vertical-align: top;
+}
+
+.jumane-page__table th {
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.jumane-page__when {
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+/* Scanning a timeline is mostly "what kind of thing is this", so the kind
+   carries the colour and everything else stays plain. */
+.jumane-page__kind {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--light-border);
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+.jumane-page__kind--loot {
+  border-color: rgba(13, 193, 13, 0.5);
+  color: var(--green);
+}
+
+.jumane-page__kind--death {
+  border-color: rgba(238, 13, 13, 0.5);
+  color: var(--invalid);
+}
+
+.jumane-page__kind--deposit,
+.jumane-page__kind--withdraw {
+  border-color: rgba(255, 152, 31, 0.5);
+  color: var(--orange);
+}
+
+.jumane-page__reply {
+  opacity: 0.75;
+  max-width: 40em;
+}
+
+.jumane-page__row--failed td {
+  background: rgba(238, 13, 13, 0.12);
+}
+
+.jumane-page__bad {
+  color: var(--invalid);
+}
+
+.jumane-page__summary {
+  margin-bottom: 8px;
+  opacity: 0.85;
+}
+
+.jumane-page__panels {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.jumane-page__panel {
+  padding: 10px;
+  box-sizing: border-box;
+  min-width: 280px;
+  flex: 1;
+}
+
+.jumane-page__panel h3 {
+  margin: 0 0 8px;
+  font-size: 1em;
+  opacity: 0.75;
+}
+
+.jumane-page__note {
+  margin-top: 10px;
+  opacity: 0.5;
+  font-size: 0.85em;
+}
+
+.jumane-page__empty {
+  opacity: 0.6;
+  font-style: italic;
+  padding: 10px 2px;
+}

@@ -48,6 +48,7 @@ import "./death-page/death-page.js";
 import "./dashboard-page/dashboard-page.js";
 import "./gear-goals-page/gear-goals-page.js";
 import "./dps-page/dps-page.js";
+import "./jumane-page/jumane-page.js";
 import "./confirm-dialog/confirm-dialog.js";
 import "./panels-page/panels-page.js";
 import "./diary-dialog/diary-dialog.js";

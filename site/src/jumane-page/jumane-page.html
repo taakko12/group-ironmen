@@ -1,0 +1,22 @@
+<div class="jumane-page__tabs">
+  <button type="button" class="men-button small jumane-page__tab active" data-view="activity">Activity</button>
+  <button type="button" class="men-button small jumane-page__tab" data-view="commands">Commands</button>
+  <button type="button" class="men-button small jumane-page__tab" data-view="health">Health</button>
+
+  <div class="men-control-container rsborder-tiny rsbackground rsbackground-hover">
+    <select class="jumane-page__period">
+      <option value="1">Last 24 hours</option>
+      <option value="7" selected>Last 7 days</option>
+      <option value="30">Last 30 days</option>
+    </select>
+  </div>
+
+  <div class="men-control-container rsborder-tiny rsbackground rsbackground-hover">
+    <select class="jumane-page__member-filter"></select>
+  </div>
+
+  <button type="button" class="men-button small jumane-page__refresh">Refresh</button>
+</div>
+
+<div class="jumane-page__error validation-error"></div>
+<div class="jumane-page__output"></div>
