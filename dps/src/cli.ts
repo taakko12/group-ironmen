@@ -119,7 +119,7 @@ async function main() {
   const options = {
     maxSwitches: budget,
     lockedIds,
-    prayers: [Prayer.RIGOUR, Prayer.PIETY],
+    prayers: [Prayer.RIGOUR, Prayer.PIETY, Prayer.AUGURY],
     maxWeapons: Number(arg("weapons") ?? 12),
     candidatesPerMonster: 6,
   };

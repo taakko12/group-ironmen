@@ -115,7 +115,11 @@ async function handlePlan(body: Record<string, unknown>) {
   const options = {
     maxSwitches: budget,
     lockedIds,
-    prayers: [Prayer.RIGOUR, Prayer.PIETY],
+    // All three go in together: the calculator applies only the one matching
+    // the loadout's style, so this means "best prayer for whatever this is".
+    // Without Augury, magic loadouts were scored unprayed while melee and
+    // ranged got theirs, which quietly biased every comparison against magic.
+    prayers: [Prayer.RIGOUR, Prayer.PIETY, Prayer.AUGURY],
     maxWeapons: Math.max(1, Math.min(Number(body.weapons ?? 12), 40)),
     candidatesPerMonster: 6,
   };

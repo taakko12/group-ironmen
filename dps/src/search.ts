@@ -138,7 +138,29 @@ function loadoutsPerWeapon(ownedIds: Iterable<number>, monster: Monster, options
 
   const results: { dps: number; ids: number[] }[] = [];
 
-  for (const weapon of maxWeapons ? weapons.slice(0, maxWeapons) : weapons) {
+  // Rank before capping. `weapons` arrives in whatever order the owner's bank
+  // happens to iterate, so slicing it raw considers an arbitrary subset: on a
+  // real 82-weapon bank, Emberlight sat at index 21 and a cap of 12 never saw
+  // it. Scoring each weapon bare is one evaluation apiece -- 82 against the
+  // ~11k the full search costs -- and it is a good enough proxy, because a
+  // weapon that is hopeless naked does not become best-in-slot once the
+  // armour is on.
+  if (maxWeapons && weapons.length > maxWeapons) {
+    const ranked = weapons
+      .map((weapon) => {
+        // A bow with no arrows deals nothing, so ranking it bare puts every
+        // ranged weapon below a bronze dagger. Give each weapon its best
+        // legal ammo first, or the cap throws away exactly the good options
+        // it exists to protect.
+        const ammo = bestAmmoFor(weapon, bySlot.ammo ?? []);
+        const ids = [weapon.id, ...lockedIds, ...(ammo ? [ammo.id] : [])];
+        return { weapon, dps: score(ids) };
+      })
+      .sort((a, b) => b.dps - a.dps);
+    weapons = ranked.slice(0, maxWeapons).map((entry) => entry.weapon);
+  }
+
+  for (const weapon of weapons) {
     // A two-hander frees nothing into the shield slot, so skip it entirely
     // rather than scoring shields that will be silently dropped.
     const slots = FILLABLE.filter(
@@ -218,4 +240,11 @@ function isLegal(weapon: EquipmentPiece, slot: keyof PlayerEquipment, piece: Equ
   if (slot !== "ammo") return true;
   // Firing dragon arrows out of a crossbow is not a loadout, it is a bug.
   return ammoApplicability(weapon.id, piece.id) !== AmmoApplicability.INVALID;
+}
+
+/** The strongest ammo in the pool this weapon can actually fire, if any. */
+function bestAmmoFor(weapon: EquipmentPiece, ammo: EquipmentPiece[]): EquipmentPiece | undefined {
+  return ammo
+    .filter((piece) => ammoApplicability(weapon.id, piece.id) === AmmoApplicability.INCLUDED)
+    .sort((a, b) => (b.bonuses?.ranged_str ?? 0) - (a.bonuses?.ranged_str ?? 0))[0];
 }

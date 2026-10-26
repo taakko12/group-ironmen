@@ -83,3 +83,26 @@ describe("bestLoadout", () => {
     expect(bestLoadout(POOL, vorkath).evaluated).toBeGreaterThan(0);
   });
 });
+
+// The weapon cap used to slice the pool in whatever order the owner's bank
+// iterated, so it considered an arbitrary subset rather than a good one. On a
+// real 82-weapon bank that buried Emberlight at index 21, where a cap of 12
+// never saw it.
+describe("weapon cap", () => {
+  // Deliberately ordered worst-first, the way a bank happily would.
+  const JUNK = [1205, 1265, 1351, 1277, 841, 1291];
+  const POOL_WITH_BURIED_BOW = [...JUNK, TWISTED_BOW, DRAGON_ARROW];
+
+  it("ranks before capping, instead of taking whatever came first", () => {
+    const capped = bestLoadout(POOL_WITH_BURIED_BOW, vorkath, { maxWeapons: 2 });
+
+    expect(capped.gear.weapon).toBe("Twisted bow");
+  });
+
+  it("a tighter cap never beats a looser one", () => {
+    const tight = bestLoadout(POOL_WITH_BURIED_BOW, vorkath, { maxWeapons: 2 }).dps;
+    const loose = bestLoadout(POOL_WITH_BURIED_BOW, vorkath, { maxWeapons: 8 }).dps;
+
+    expect(loose).toBeGreaterThanOrEqual(tight - 1e-9);
+  });
+});
