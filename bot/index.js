@@ -5,6 +5,8 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { processLootMessage, processDeathMessage } = require('./messageProcessor');
 const { registerCommands } = require('./deploy-commands');
 const itemData = require('./itemData');
+const textCommands = require('./textCommands');
+const customCommands = require('./customCommands');
 const bankPings = require('./bankPings');
 const attachmentRefresh = require('./attachmentRefresh');
 const mustBankAnnounce = require('./mustBankAnnounce');
@@ -40,6 +42,7 @@ client.once('clientReady', async () => {
   }
 
   itemData.start();
+  customCommands.warnIfEphemeral();
   bankPings.start(client);
   attachmentRefresh.start();
   mustBankAnnounce.start(client);
@@ -88,6 +91,16 @@ client.on('messageCreate', async (message) => {
   }
 
   if (message.author.bot) return;
+
+  // !commands first: they are explicit, and an unprefixed message should
+  // never be swallowed by one. handle() returns false for anything that is
+  // not a command, so normal chat falls through untouched.
+  if (await textCommands.handle(message).catch((err) => {
+    console.error(`[commands] ${err.message}`);
+    return false;
+  })) {
+    return;
+  }
 
   if (message.mentions.has(client.user)) {
     await assistant.handleMention(message).catch((err) => console.error(`[assistant] ${err.message}`));
