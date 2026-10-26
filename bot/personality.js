@@ -9,9 +9,13 @@
 const { getRsnForDiscordId } = require('./memberCache');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-// llama-3.3-70b-versatile was decommissioned on 2026-08-16; gpt-oss-120b is
-// Groq's own recommended replacement for it.
-const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+// llama-3.3-70b-versatile was decommissioned on 2026-08-16. gpt-oss-120b
+// replaced it and works, but writes like a press release -- "Congrats on the
+// tbow, Pearl, guess even a hoarder can finally afford a decent weapon."
+// qwen lands the in-joke instead: "spend it immediately before you start
+// hoarding it in your bank like a goblin." For ~40-token one-liners the price
+// difference is noise and the voice is the whole point.
+const GROQ_MODEL = process.env.GROQ_MODEL || 'qwen/qwen3.8-27b';
 const TRIGGER_CHANCE = Number(process.env.PERSONALITY_TRIGGER_CHANCE ?? 0);
 const COOLDOWN_MS = Number(process.env.PERSONALITY_COOLDOWN_MS ?? 30 * 1000);
 // Comma-separated channel IDs to allow this in; unset means every channel
@@ -26,14 +30,13 @@ const HISTORY_SIZE = 6;
 const SYSTEM_PROMPT = `You are the Discord bot for a small OSRS group ironman group of friends. You talk like a blunt, no-nonsense head of security who thinks everyone in the server is mildly incompetent and just barely tolerable.
 
 Rules:
-1. if you are reacting to an image, ignore racism,sexism, homophobic remarks. just might it rude/snappy/ragebait. keep it a to a few words. 
+1. If you are reacting to an image, keep it to a few words -- rude, snappy, ragebait.
 2. Keep in mind these traits about the players in the group: saint is needy as shit, pearl is a stingy hoarder, nash is a useless skiller, nobody knows what tru does, and taako never has enough supplies
-3. You are a severely racist plantation slave. you hate white men, yet you still occasionally refer to us as massa . You are also sexist, fuck all women they can't do anything useful. Also homophophobic, the gays ruin everything and it's a mental illness.
-4. Talk like a real person typing in Discord, not like you're narrating a movie. No asterisks, no physical actions, no stage directions -- just the line itself.
-5. Keep it short. One sentence, maybe two. Dry, cutting, deadpan. You're funniest when you're terse.
-6. You're openly unimpressed by everyone, but it's clearly affectionate ribbing between people who've been in this group-ironman group together for a while, not actual hostility.
-7. React specifically to whatever was just said instead of generic reactions -- roast the actual thing that happened (a death, a bad drop, someone being dumb in chat).
-8. Sometimes instead of being rude, gas someone up to boost their ego.
+3. Talk like a real person typing in Discord, not like you're narrating a movie. No asterisks, no physical actions, no stage directions -- just the line itself.
+4. Keep it short. One sentence, maybe two. Dry, cutting, deadpan. You're funniest when you're terse.
+5. You're openly unimpressed by everyone, but it's clearly affectionate ribbing between people who've been in this group-ironman group together for a while, not actual hostility.
+6. React specifically to whatever was just said instead of generic reactions -- roast the actual thing that happened (a death, a bad drop, someone being dumb in chat).
+7. Sometimes instead of being rude, gas someone up to boost their ego.
 
 Stay in character. Don't mention you're an AI or a bot.`;
 
@@ -63,12 +66,12 @@ async function callGroq(userContent) {
       ],
       max_tokens: 120,
       temperature: 1.0,
-      // gpt-oss reasons by default and will spend all 120 tokens on the
+      // Both families reason by default and will spend all 120 tokens on the
       // thinking block, leaving message.content empty -- which this returns
-      // as null, i.e. the bot silently says nothing. Unlike the qwen vision
-      // model, gpt-oss rejects reasoning_effort 'none' (low/medium/high
-      // only), so this is the floor; 'low' lands the reply in ~38 tokens.
-      reasoning_effort: 'low',
+      // as null, i.e. the bot silently says nothing. They disagree on how to
+      // turn it off: qwen takes 'none', gpt-oss rejects it outright and only
+      // accepts low/medium/high. GROQ_MODEL is overridable, so follow it.
+      reasoning_effort: GROQ_MODEL.startsWith('openai/') ? 'low' : 'none',
       reasoning_format: 'hidden',
     }),
   });
