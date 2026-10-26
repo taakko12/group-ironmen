@@ -88,7 +88,7 @@ const builtins = {
   async help() {
     return [
       `\`${PREFIX}price <item>\` -- GE price`,
-      `\`${PREFIX}who <item>\` -- who in the group has one`,
+      `\`${PREFIX}where <item>\` -- who has one, and whether it is banked or equipped`,
       `\`${PREFIX}gear <boss>\` -- best setup from your own bank`,
       `\`${PREFIX}addcom ${PREFIX}name response\` -- add a custom command`,
       `Variables in custom commands: \`$(user)\` \`$(touser)\` \`$(query)\` \`$(count)\` \`$(rsn)\``,
@@ -97,30 +97,57 @@ const builtins = {
 
   async price(args) {
     if (!args) return `usage: \`${PREFIX}price <item>\``;
-    const itemId = itemData.getItemId(args);
-    if (!itemId) return `never heard of "${args}"`;
+    const item = itemData.findItem(args);
+    if (!item) return `never heard of "${args}"`;
 
-    const price = (await gePrices())[String(itemId)];
-    if (price === undefined) return `${itemData.getItemName(itemId)} has no GE price (untradeable?)`;
-    return `**${itemData.getItemName(itemId)}** — ${price.toLocaleString()} gp (${short(price)})`;
+    const price = (await gePrices())[String(item.id)];
+    if (price === undefined) return `**${item.name}** has no GE price (untradeable?)`;
+    return `**${item.name}** — ${price.toLocaleString()} gp (${short(price)})`;
   },
 
-  async who(args) {
-    if (!args) return `usage: \`${PREFIX}who <item>\``;
-    const itemId = itemData.getItemId(args);
-    if (!itemId) return `never heard of "${args}"`;
+  async where(args) {
+    if (!args) return `usage: \`${PREFIX}where <item>\` — fuzzy, so \`${PREFIX}where bgs\` works`;
 
+    const matches = itemData.searchItems(args, 5);
+    if (!matches.length) return `never heard of "${args}"`;
+
+    const item = matches[0];
     const holders = [];
     for (const member of await groupBanks()) {
-      let quantity = 0;
-      for (const storage of [member.bank, member.equipment, member.inventory]) {
-        for (const [id, qty] of itemPairs(storage)) if (id === itemId) quantity += qty;
+      const places = [];
+      let total = 0;
+      // Where it is matters as much as who has it: something in the bank is
+      // a trip away, something equipped is on them right now.
+      for (const [label, storage] of [
+        ['equipped', member.equipment],
+        ['inv', member.inventory],
+        ['bank', member.bank],
+      ]) {
+        let quantity = 0;
+        for (const [id, qty] of itemPairs(storage)) if (id === item.id) quantity += qty;
+        if (quantity > 0) {
+          total += quantity;
+          places.push(label === 'bank' ? `bank x${short(quantity)}` : `${label} x${short(quantity)}`);
+        }
       }
-      if (quantity > 0) holders.push(`${member.name === '@SHARED' ? 'shared storage' : member.name} (${short(quantity)})`);
+      if (total > 0) {
+        const who = member.name === '@SHARED' ? 'shared storage' : member.name;
+        holders.push(`${who} — ${places.join(', ')}`);
+      }
     }
 
-    const name = itemData.getItemName(itemId);
-    return holders.length ? `**${name}**: ${holders.join(', ')}` : `nobody has a ${name}`;
+    // Say what it matched when the query was not the name, so a fuzzy hit on
+    // the wrong item is obvious rather than quietly wrong.
+    const header =
+      item.name.toLowerCase() === args.trim().toLowerCase()
+        ? `**${item.name}**`
+        : `**${item.name}** (for "${args}")`;
+    const alternatives =
+      matches.length > 1 && holders.length === 0
+        ? `\nalso matched: ${matches.slice(1).map((m) => m.name).join(', ')}`
+        : '';
+
+    return holders.length ? `${header}\n${holders.join('\n')}` : `${header} — nobody has one${alternatives}`;
   },
 
   async gear(args, message) {
@@ -176,6 +203,7 @@ const builtins = {
 };
 
 builtins.editcom = builtins.addcom;
+builtins.who = builtins.where;
 
 /** $(user) and friends, Nightbot-style. */
 async function substitute(template, { name, args, message }) {
