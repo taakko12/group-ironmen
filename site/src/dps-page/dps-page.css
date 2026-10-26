@@ -222,3 +222,112 @@ dps-page {
   border-color: var(--orange);
   color: var(--orange);
 }
+
+/* Equipment and inventory, laid out like the in-game panels -- same slot
+   positions and sprite as player-equipment, so a plan reads as a screen
+   rather than a list you have to translate in your head. */
+.dps-page__panels {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.dps-page__equipment {
+  position: relative;
+  width: 175px;
+  height: 200px;
+  flex-shrink: 0;
+}
+
+.dps-page__slot,
+.dps-page__inv-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-image: url(/ui/170-0.png);
+  width: 36px;
+  height: 36px;
+}
+
+.dark-mode .dps-page__slot,
+.dark-mode .dps-page__inv-slot {
+  background-image: url(/ui/170-0-dark.png);
+}
+
+.dps-page__slot {
+  position: absolute;
+}
+
+.dps-page__slot item-box,
+.dps-page__inv-slot item-box {
+  height: 32px;
+}
+
+/* The padlock sits on the slot itself: you see the plan, then settle the
+   slots you have already decided and re-plan. */
+.dps-page__slot-lock {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  font-size: 0.6em;
+  line-height: 1;
+}
+
+.dps-page__slot--head {
+  left: 70px;
+  top: 0;
+}
+.dps-page__slot--cape {
+  left: 29px;
+  top: 39px;
+}
+.dps-page__slot--neck {
+  left: 70px;
+  top: 39px;
+}
+.dps-page__slot--ammo {
+  left: 111px;
+  top: 39px;
+}
+.dps-page__slot--weapon {
+  left: 14px;
+  top: 78px;
+}
+.dps-page__slot--body {
+  left: 70px;
+  top: 78px;
+}
+.dps-page__slot--shield {
+  left: 126px;
+  top: 78px;
+}
+.dps-page__slot--legs {
+  left: 70px;
+  top: 120px;
+}
+.dps-page__slot--hands {
+  left: 14px;
+  top: 162px;
+}
+.dps-page__slot--feet {
+  left: 70px;
+  top: 162px;
+}
+.dps-page__slot--ring {
+  left: 126px;
+  top: 162px;
+}
+
+.dps-page__inv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 40px);
+  grid-template-rows: repeat(7, 36px);
+  gap: 1px;
+}
+
+.dps-page__inv-caption {
+  margin-top: 6px;
+  opacity: 0.6;
+  font-size: 0.85em;
+}

@@ -176,6 +176,52 @@ export class DpsPage extends BaseElement {
     }
   }
 
+  // The same slot positions and sprite the player-equipment panel uses, so a
+  // plan reads like the in-game screen rather than a list you have to
+  // translate. The inventory beside it is the 4x7 grid, holding exactly what
+  // the plan says to carry.
+  static panelHtml(plan, locked) {
+    const SLOTS = ["head", "cape", "neck", "ammo", "weapon", "body", "shield", "legs", "hands", "feet", "ring"];
+    const slots = SLOTS.map((slot) => {
+      const itemId = plan.wornIds[slot];
+      const name = plan.worn[slot];
+      const known = itemId !== undefined && Item.itemDetails[itemId];
+      return `<div class="dps-page__slot dps-page__slot--${slot}" title="${name ? escapeHtml(name) : slot}">${
+        known ? `<item-box item-id="${itemId}" item-quantity="1" no-tooltip></item-box>` : ""
+      }${
+        name
+          ? `<span class="dps-page__slot-lock ${locked.has(name) ? "dps-page__lock--on" : ""} dps-page__lock"
+                   data-name="${escapeHtml(name)}" title="Lock ${escapeHtml(name)}">${
+              locked.has(name) ? "🔒" : "🔓"
+            }</span>`
+          : ""
+      }</div>`;
+    }).join("");
+
+    // 28 cells whatever happens: a half-drawn grid reads as a bug, and the
+    // empty ones are the point -- they are the food and brews the switches
+    // are competing with.
+    const cells = [];
+    for (let i = 0; i < 28; i += 1) {
+      const item = plan.carried[i];
+      const known = item && Item.itemDetails[item.itemId];
+      cells.push(
+        `<div class="dps-page__inv-slot" title="${item ? escapeHtml(item.name) : ""}">${
+          known ? `<item-box item-id="${item.itemId}" item-quantity="1" no-tooltip></item-box>` : ""
+        }</div>`
+      );
+    }
+
+    return `
+<div class="dps-page__panels">
+  <div class="dps-page__equipment">${slots}</div>
+  <div class="dps-page__inventory">
+    <div class="dps-page__inv-grid">${cells.join("")}</div>
+    <div class="dps-page__inv-caption">${plan.switches} of 28 slots used by gear</div>
+  </div>
+</div>`;
+  }
+
   static itemHtml(itemId, name, locked, extraClass = "") {
     const known = Item.itemDetails[itemId];
     return `
@@ -234,6 +280,9 @@ export class DpsPage extends BaseElement {
   &middot; ${escapeHtml(result.member)}'s ${result.poolSize} items
 </div>
 ${curve}
+<div class="dps-page__panel rsborder-tiny rsbackground">
+  ${DpsPage.panelHtml(plan, locked)}
+</div>
 <div class="dps-page__panel rsborder-tiny rsbackground">
   <h3>Wear</h3>
   <div class="dps-page__items">${worn}</div>
