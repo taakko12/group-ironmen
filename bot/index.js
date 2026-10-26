@@ -7,6 +7,8 @@ const { registerCommands } = require('./deploy-commands');
 const itemData = require('./itemData');
 const textCommands = require('./textCommands');
 const customCommands = require('./customCommands');
+const commandLog = require('./commandLog');
+const httpServer = require('./httpServer');
 const bankPings = require('./bankPings');
 const attachmentRefresh = require('./attachmentRefresh');
 const mustBankAnnounce = require('./mustBankAnnounce');
@@ -43,6 +45,10 @@ client.once('clientReady', async () => {
 
   itemData.start();
   customCommands.warnIfEphemeral();
+  commandLog.load();
+  // Gives the site something to read. The bot is a Discord client, so without
+  // this its command history and health are only visible in Railway.
+  httpServer.start(client);
   bankPings.start(client);
   attachmentRefresh.start();
   mustBankAnnounce.start(client);

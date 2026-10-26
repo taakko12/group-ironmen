@@ -8,6 +8,7 @@
 // only works with a prefix.
 
 const customCommands = require('./customCommands');
+const commandLog = require('./commandLog');
 const itemData = require('./itemData');
 const { getGroupMembers } = require('./backendClient');
 const { getRsnForDiscordId } = require('./memberCache');
@@ -240,11 +241,16 @@ async function handle(message) {
 
   if (onCooldown(`${message.channelId}:${name}`)) return true;
 
+  const started = Date.now();
+  const entry = { command: name, args, user: message.author.username, userId: message.author.id, channelId: message.channelId };
+
   try {
     const reply = builtin ? await builtin(args, message) : await substitute(custom.response, { name, args, message });
     if (reply) await message.reply({ content: reply.slice(0, 1900), allowedMentions: { parse: [] } });
+    commandLog.record({ ...entry, reply, ok: true, ms: Date.now() - started });
   } catch (err) {
     console.error(`[commands] ${name} failed: ${err.message}`);
+    commandLog.record({ ...entry, reply: err.message, ok: false, ms: Date.now() - started });
     await message.reply(`that broke: ${err.message}`.slice(0, 1900)).catch(() => {});
   }
   return true;

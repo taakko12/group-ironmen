@@ -13,6 +13,7 @@
 const { AttachmentBuilder } = require('discord.js');
 const { getItemName } = require('./itemData');
 const { renderBankAlert } = require('./bankPingImage');
+const httpServer = require('./httpServer');
 
 const POLL_INTERVAL_MS = 10 * 1000;
 
@@ -33,6 +34,8 @@ async function pollOnce(client) {
   }
 
   const pings = await response.json();
+  // Last successful poll, surfaced on the site's bot health panel.
+  httpServer.beat('bankPings', { pending: pings.length });
   if (pings.length === 0) return;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
