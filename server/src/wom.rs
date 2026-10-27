@@ -237,17 +237,35 @@ async fn fetch_player_boss_kc(rsn: &str) -> Result<HashMap<String, i64>, ApiErro
 pub async fn update_wom_boss_kc(db_pool: &Pool) -> Result<(), ApiError> {
     let member_names = get_all_member_names(db_pool).await?;
 
-    let mut all_kc: HashMap<String, HashMap<String, i64>> = HashMap::new();
+    // Start from what we already have rather than an empty map. WOM answers
+    // 429 often enough that a round where every member fails is routine, and
+    // storing the empty result wiped the whole cache -- which left
+    // /wom-boss-kc returning {} and /dry-streak answering "never ranked on
+    // the hiscores" for everyone, indefinitely, because the cache only
+    // refilled on a round where all members happened to succeed.
+    //
+    // Stale kill counts are worth far more than none here: they move slowly,
+    // and dry-streak maths is about order of magnitude.
+    let mut all_kc: HashMap<String, HashMap<String, i64>> = get_cached_wom_boss_kc();
+    let mut failures = 0;
     for member_name in &member_names {
         match fetch_player_boss_kc(member_name).await {
             Ok(kc) => {
                 all_kc.insert(member_name.clone(), kc);
             }
             Err(err) => {
+                failures += 1;
                 log::error!("Failed to fetch WOM boss KC for '{}': {}", member_name, err);
             }
         }
         time::sleep(Duration::from_millis(WOM_CALL_SPACING_MS)).await;
+    }
+
+    // Someone who left the group should eventually drop out, but only when we
+    // actually heard back about everyone -- otherwise a bad round prunes
+    // members who are merely unreachable.
+    if failures == 0 {
+        all_kc.retain(|name, _| member_names.contains(name));
     }
 
     WOM_BOSS_KC.store(Arc::new(serde_json::to_string(&all_kc)?));
