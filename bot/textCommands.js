@@ -9,6 +9,8 @@
 
 const customCommands = require('./customCommands');
 const commandLog = require('./commandLog');
+const reminders = require('./reminders');
+const watchdog = require('./watchdog');
 const itemData = require('./itemData');
 const { getGroupMembers } = require('./backendClient');
 const { getRsnForDiscordId } = require('./memberCache');
@@ -69,6 +71,12 @@ function short(n) {
 
 // Whoever asked, resolved to an RSN when they have one linked, so `!gear`
 // and friends work with no arguments.
+// Discord's own permission model rather than a role name of ours: it already
+// knows who is trusted in this server, and a hardcoded name would rot.
+function canManage(message) {
+  return Boolean(message.member?.permissions?.has?.('ManageMessages'));
+}
+
 async function askerRsn(message) {
   try {
     return await getRsnForDiscordId(message.author.id);
@@ -91,6 +99,8 @@ const builtins = {
       `\`${PREFIX}price <item>\` -- GE price`,
       `\`${PREFIX}where <item>\` -- who has one, and whether it is banked or equipped`,
       `\`${PREFIX}gear <boss>\` -- best setup from your own bank`,
+      `\`${PREFIX}remind 80m herb run\` -- nags you later; \`${PREFIX}reminders\` lists them`,
+      `\`${PREFIX}status\` -- is anything broken right now`,
       `\`${PREFIX}addcom ${PREFIX}name response\` -- add a custom command`,
       `Variables in custom commands: \`$(user)\` \`$(touser)\` \`$(query)\` \`$(count)\` \`$(rsn)\``,
     ].join('\n');
@@ -190,6 +200,45 @@ const builtins = {
       .join('\n');
   },
 
+  async remind(args, message) {
+    const [duration, ...rest] = args.split(/\s+/);
+    const text = rest.join(' ');
+    const ms = duration ? reminders.parseDuration(duration) : null;
+    if (!ms || !text) {
+      return `usage: \`${PREFIX}remind 80m herb run\` — s/m/h/d, bare numbers mean minutes`;
+    }
+
+    const reminder = reminders.add({ userId: message.author.id, channelId: message.channelId, text, ms });
+    if (!reminder) return 'you already have too many reminders pending';
+    return `ok, in ${reminders.formatDelay(ms)}: ${text}`;
+  },
+
+  async reminders(args, message) {
+    const mine = reminders.listFor(message.author.id);
+    if (!mine.length) return `nothing pending — set one with \`${PREFIX}remind 80m herb run\``;
+    return mine
+      .map((r) => `\`#${r.id}\` in ${reminders.formatDelay(r.dueAt - Date.now())} — ${r.text}`)
+      .join('\n');
+  },
+
+  async unremind(args, message) {
+    const id = parseInt(args, 10);
+    if (!Number.isInteger(id)) return `usage: \`${PREFIX}unremind <id>\` — see \`${PREFIX}reminders\``;
+    return reminders.remove(id, message.author.id) ? `cancelled #${id}` : `you have no reminder #${id}`;
+  },
+
+  // The same checks the watchdog runs on a timer, on demand -- "is it just me
+  // or is the site broken" should be answerable in the channel.
+  async status() {
+    const checks = await watchdog.runChecks();
+    const bad = checks.filter((check) => !check.ok);
+    if (!bad.length) return `:white_check_mark: all ${checks.length} checks healthy`;
+    return [
+      `:rotating_light: ${bad.length} of ${checks.length} checks failing`,
+      ...bad.map((c) => `**${c.name}** — ${c.detail ?? 'down'}`),
+    ].join('\n');
+  },
+
   async addcom(args, message) {
     const [name, ...rest] = args.split(/\s+/);
     const response = rest.join(' ');
@@ -200,7 +249,11 @@ const builtins = {
     return `${replaced ? 'updated' : 'added'} \`${PREFIX}${customCommands.normalise(name)}\``;
   },
 
-  async delcom(args) {
+  // Deleting is the one action nobody can undo, so it needs a role the whole
+  // server does not have. Adding and editing stay open -- that is the point
+  // of custom commands.
+  async delcom(args, message) {
+    if (!canManage(message)) return 'only someone who can manage messages here can delete a command';
     if (!args) return `usage: \`${PREFIX}delcom ${PREFIX}name\``;
     return customCommands.remove(args.split(/\s+/)[0])
       ? `deleted \`${PREFIX}${customCommands.normalise(args)}\``
