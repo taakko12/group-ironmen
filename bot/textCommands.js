@@ -101,7 +101,10 @@ const builtins = {
     const item = itemData.findItem(args);
     if (!item) return `never heard of "${args}"`;
 
-    const price = (await gePrices())[String(item.id)];
+    const prices = await gePrices();
+    // Variants share a name but not a price row; an uncharged copy may be the
+    // canonical id while only the charged one is listed.
+    const price = item.ids.map((id) => prices[String(id)]).find((value) => value !== undefined);
     if (price === undefined) return `**${item.name}** has no GE price (untradeable?)`;
     return `**${item.name}** — ${price.toLocaleString()} gp (${short(price)})`;
   },
@@ -125,7 +128,9 @@ const builtins = {
         ['bank', member.bank],
       ]) {
         let quantity = 0;
-        for (const [id, qty] of itemPairs(storage)) if (id === item.id) quantity += qty;
+        // Every id sharing the name: variants are separate ids, and the one
+        // in someone's bank is often not the canonical one.
+        for (const [id, qty] of itemPairs(storage)) if (item.ids.includes(id)) quantity += qty;
         if (quantity > 0) {
           total += quantity;
           places.push(label === 'bank' ? `bank x${short(quantity)}` : `${label} x${short(quantity)}`);

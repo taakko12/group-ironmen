@@ -7,6 +7,7 @@ const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day — item data rarely c
 
 let itemNames = new Map();
 let itemIds = new Map();
+let idsByName = new Map();
 
 function normalizeItemName(name) {
   return name.trim().toLowerCase();
@@ -24,10 +25,18 @@ async function load() {
     // with no GE price while the real one sits at 13576. Lowest id wins --
     // it is the real item for everything anyone would look up.
     itemIds = new Map();
+    idsByName = new Map();
     for (const [id, name] of itemNames) {
       const key = normalizeItemName(name);
       const existing = itemIds.get(key);
       if (existing === undefined || id < existing) itemIds.set(key, id);
+
+      // Every id sharing a name, not just the canonical one. Knowing which id
+      // is "the real item" is right for a price lookup and wrong for finding
+      // who owns one: Ring of the elements is 26815 and 26818, and the one in
+      // the bank was the id the canonical rule discarded.
+      if (!idsByName.has(key)) idsByName.set(key, []);
+      idsByName.get(key).push(id);
     }
     console.log(`[itemData] Loaded ${itemNames.size} item names`);
   } catch (err) {
@@ -64,15 +73,6 @@ function isSubsequence(query, name) {
   return false;
 }
 
-/**
- * Items whose names resemble `query`, best first.
- *
- * Tiered rather than scored: an exact name always wins, then a prefix, then a
- * substring, then a subsequence. Within a tier the shorter name wins, because
- * a query is a better match for "Dragon dagger" than "Dragon dagger(p++)",
- * and ties break on the lower id -- names are not unique in the catalog
- * (placeholders and variants repeat them) and the lowest id is the real item.
- */
 // Community abbreviations. No amount of string distance turns "bgs" into
 // "Bandos godsword" -- it is a convention, not a spelling, and a subsequence
 // match happily prefers "Big bass". These are what people actually type.
@@ -107,6 +107,15 @@ const ALIASES = {
   bis: 'barrows gloves',
 };
 
+/**
+ * Items whose names resemble `query`, best first.
+ *
+ * Tiered rather than scored: an exact name always wins, then a prefix, then a
+ * substring, then a subsequence. Within a tier the shorter name wins, because
+ * a query is a better match for "Dragon dagger" than "Dragon dagger(p++)",
+ * and ties break on the lower id -- names are not unique in the catalog
+ * (placeholders and variants repeat them) and the lowest id is the real item.
+ */
 function searchItems(query, limit = 5) {
   const needle = ALIASES[normalizeItemName(query)] ?? normalizeItemName(query);
   if (needle.length < 2) return [];
@@ -125,7 +134,14 @@ function searchItems(query, limit = 5) {
   }
 
   matches.sort((a, b) => a.tier - b.tier || a.name.length - b.name.length || a.id - b.id);
-  return matches.slice(0, limit).map(({ id }) => ({ id, name: getItemName(id) }));
+  // `ids` is every variant sharing the name; `id` is the canonical one. Price
+  // lookups want the canonical, ownership lookups want them all.
+  return matches.slice(0, limit).map(({ id, name }) => ({ id, name: getItemName(id), ids: idsByName.get(name) ?? [id] }));
+}
+
+/** Every id sharing a name, canonical first. */
+function idsForName(name) {
+  return idsByName.get(normalizeItemName(name)) ?? [];
 }
 
 /** Best single match, or null. The common case for a command argument. */
@@ -133,4 +149,4 @@ function findItem(query) {
   return searchItems(query, 1)[0] ?? null;
 }
 
-module.exports = { start, getItemName, getItemId, searchItems, findItem, SITE_URL };
+module.exports = { start, getItemName, getItemId, searchItems, findItem, idsForName, SITE_URL };
