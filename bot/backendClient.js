@@ -66,6 +66,18 @@ function getGroupMembers() {
 // { member_name: { wom_boss_key: absolute_kill_count } } for every member,
 // used for dry-streak math -- this is absolute KC, not a delta over a period
 // like getWomGains would be if we had one.
+function getStorageLog() {
+  return get('/get-storage-log');
+}
+
+// getGroupMembers deliberately asks for from_time=now, which blanks every
+// gated column -- so it cannot answer "what are they doing". This asks for
+// the live state instead: interacting, coordinates and stats are small, and
+// include_heavy=false still leaves out the bank, which is the expensive part.
+function getLiveMembers() {
+  return get('/get-group-data?from_time=2000-01-01T00:00:00Z&include_heavy=false');
+}
+
 function getBossKc() {
   return get('/wom-boss-kc');
 }
@@ -84,6 +96,8 @@ module.exports = {
   getDeathData,
   getBankPingData,
   getGroupMembers,
+  getStorageLog,
+  getLiveMembers,
   getBossKc,
   getWomGains,
 };

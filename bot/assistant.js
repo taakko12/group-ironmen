@@ -10,6 +10,7 @@ const { generateBankPingLine: toInCharacterLine } = require('./personality');
 const { getLootData, getDeathData, getGroupMembers, getWomGains } = require('./backendClient');
 const { buildLootLeaderboard, buildDeathLeaderboard } = require('./leaderboard');
 const { getDryStreak } = require('./dryStreak');
+const { getRecentActivity } = require('./activity');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 // Deliberately its own model/quota, separate from personality.js's GROQ_MODEL
@@ -35,7 +36,7 @@ const SHARED_MEMBER_NAME = '@SHARED';
 // function-call syntax instead of Groq's structured format, which Groq then
 // rejects with a tool_use_failed error). Tool selection stays plain; the
 // personality voice gets layered on afterward as a separate restyle pass.
-const TOOL_SYSTEM_PROMPT = `You are a data assistant for an OSRS group ironman Discord bot. Only call a tool when the question is explicitly asking to look up real data you have access to: loot totals, death counts, skill/boss XP gains, or dry-streak odds for a specific named member on a specific boss. Never call a tool just because the question mentions a boss, item, or group-related wording in passing.
+const TOOL_SYSTEM_PROMPT = `You are a data assistant for an OSRS group ironman Discord bot. Only call a tool when the question is explicitly asking to look up real data you have access to: loot totals, death counts, skill/boss XP gains, dry-streak odds for a specific named member on a specific boss, or what a member has recently been doing and is doing right now. Never call a tool just because the question mentions a boss, item, or group-related wording in passing.
 
 If the question is really an opinion, banter, hypothetical, or anything else a tool can't actually answer (e.g. "why would someone hoard potions", "what do you think of X"), do not call any tool at all -- just say plainly, in one sentence, that this isn't something you have data to look up. Never guess at numbers, and never report a tool's result as the answer unless it actually addresses what was asked.
 
@@ -95,6 +96,22 @@ const tools = [
   {
     type: 'function',
     function: {
+      name: 'get_recent_activity',
+      description:
+        "What a member has actually been doing lately: drops they got, deaths, shared-storage movements, and what they are fighting right now. Use this for open questions like \"what has tru been up to\" -- the other tools only give totals and leaderboards, which cannot answer that.",
+      parameters: {
+        type: 'object',
+        properties: {
+          member: { type: 'string', description: "The member's RSN. Omit for everyone." },
+          days: { type: 'number', description: 'How far back to look. Defaults to 7.' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_dry_streak',
       description:
         "Check how dry (unlucky) a member is on a boss's notable unique drops, based on their total kill count and whether they've ever obtained each unique. Only covers a curated set of bosses -- if it's not covered, say so.",
@@ -129,6 +146,9 @@ async function executeTool(name, args) {
     }
     case 'get_dry_streak': {
       return getDryStreak(args.member, args.boss);
+    }
+    case 'get_recent_activity': {
+      return getRecentActivity(args.member, args.days ?? 7);
     }
     default:
       return { error: `Unknown tool: ${name}` };
