@@ -51,7 +51,7 @@ function pushHistory(channelId, author, content) {
   recentByChannel.set(channelId, list);
 }
 
-async function callGroq(userContent) {
+async function callGroq(userContent, { extraSystem, maxTokens = 120 } = {}) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -61,10 +61,10 @@ async function callGroq(userContent) {
     body: JSON.stringify({
       model: GROQ_MODEL,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: extraSystem ? `${SYSTEM_PROMPT}\n\n${extraSystem}` : SYSTEM_PROMPT },
         { role: 'user', content: userContent },
       ],
-      max_tokens: 120,
+      max_tokens: maxTokens,
       temperature: 1.0,
       // Both families reason by default and will spend all 120 tokens on the
       // thinking block, leaving message.content empty -- which this returns
@@ -103,6 +103,24 @@ async function generateBankPingLine(context) {
   }
 }
 
+// Restyling a set of looked-up facts is a different job from a one-line bank
+// ping, and the base prompt's "keep it short, one sentence" actively fights
+// it: asked what five people are doing, it would answer about one and drop
+// the rest. Same voice, but told that the facts are the point.
+async function restyleFacts(context) {
+  if (!GROQ_API_KEY) return null;
+  try {
+    return await callGroq(context, {
+      maxTokens: 350,
+      extraSystem:
+        'This message is a set of facts that were looked up for someone who asked. Mention every person or item you were given -- being rude about them is fine, leaving them out is not. Never invent a detail that is not in the facts, and never imply one caused another unless you were told so. Rule 4 about length does not apply here: cover everything, briefly.',
+    });
+  } catch (err) {
+    console.error(`[personality] Failed to restyle facts: ${err.message}`);
+    return null;
+  }
+}
+
 // Only for the ambient/unprompted chime-in -- direct @mentions are routed to
 // assistant.js instead (see index.js), since those are real questions with
 // tool access rather than vibes off recent chat.
@@ -133,4 +151,4 @@ async function maybeReply(message) {
   }
 }
 
-module.exports = { maybeReply, SYSTEM_PROMPT, generateBankPingLine };
+module.exports = { maybeReply, SYSTEM_PROMPT, generateBankPingLine, restyleFacts };

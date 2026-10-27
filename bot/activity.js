@@ -92,11 +92,12 @@ async function getRecentActivity(member, days = 7) {
       online: idleHours !== null && idleHours < 0.25,
       lastSeenHoursAgo: idleHours === null ? null : Number(idleHours.toFixed(1)),
       fighting: entry.interacting?.name ?? null,
-      // ratio is the target's remaining health as a percentage; -1 means the
-      // thing they clicked is not a combat npc (a banker, a navigator).
-      targetHealthPercent:
-        entry.interacting && entry.interacting.ratio >= 0 ? entry.interacting.ratio : null,
-      hitpoints: entry.stats ? `${entry.stats[0]}/${entry.stats[1]}` : null,
+      // Both of these are percentages and the model will happily attribute
+      // one to the other -- it reported "tru is on the Leviathan at 57%
+      // health" when 57% was the Leviathan's. The names have to say whose.
+      healthOfTheThingTheyAreFighting:
+        entry.interacting && entry.interacting.ratio >= 0 ? `${entry.interacting.ratio}%` : null,
+      theirOwnHitpoints: entry.stats ? `${entry.stats[0]}/${entry.stats[1]}` : null,
     });
   }
 

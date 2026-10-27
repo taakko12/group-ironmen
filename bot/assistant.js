@@ -6,7 +6,7 @@
 
 // generateBankPingLine is really just "restyle this factual context in the
 // bot's voice" -- reused here under a clearer name for that purpose.
-const { generateBankPingLine: toInCharacterLine } = require('./personality');
+const { restyleFacts: toInCharacterLine } = require('./personality');
 const { getLootData, getDeathData, getGroupMembers, getWomGains } = require('./backendClient');
 const { buildLootLeaderboard, buildDeathLeaderboard } = require('./leaderboard');
 const { getDryStreak } = require('./dryStreak');
@@ -287,6 +287,13 @@ async function handleMention(message) {
     const answer = await answerQuestion(question, askerName);
     if (answer) await message.channel.send(answer);
   } catch (err) {
+    // Groq's free tier is 8k tokens/minute and this loop resends the whole
+    // tool schema each round, so a burst of questions hits it. Saying nothing
+    // looks identical to the bot being broken, which is the failure mode this
+    // whole stack keeps having.
+    if (/\b429\b|rate_limit/i.test(err.message)) {
+      await message.channel.send('hit my rate limit, ask again in a few seconds').catch(() => {});
+    }
     console.error(`[assistant] Failed to answer question: ${err.message}`);
   }
 }
