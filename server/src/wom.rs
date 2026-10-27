@@ -376,18 +376,43 @@ pub async fn fetch_group_boss_timeline(
     result
 }
 
-pub async fn update_wom_gains(db_pool: &Pool) -> Result<(), ApiError> {
+/// How often each period is actually worth refetching, as a cycle multiple.
+///
+/// Refreshing all four periods for all five members every ten minutes is 20
+/// calls against WOM's 20-per-60s unauthenticated limit -- the gains loop
+/// alone spent the entire budget, which is why boss kc ran last and 429'd
+/// every single time, leaving /dry-streak permanently empty. A year's gains
+/// do not meaningfully change in ten minutes; the day's do.
+fn period_cycle_divisor(period: &str) -> u64 {
+    match period {
+        "day" => 1,
+        "week" => 3,
+        "month" => 6,
+        _ => 12,
+    }
+}
+
+pub async fn update_wom_gains(db_pool: &Pool, cycle: u64) -> Result<(), ApiError> {
     let member_names = get_all_member_names(db_pool).await?;
 
-    let mut all_gains: HashMap<String, HashMap<String, WomPlayerGains>> = HashMap::new();
+    // Start from the cached value so a period we skip this cycle -- or one
+    // that 429s -- keeps the data it already had instead of being blanked.
+    let mut all_gains: HashMap<String, HashMap<String, WomPlayerGains>> =
+        serde_json::from_str(&WOM_GAINS.load()).unwrap_or_default();
+
     for period in WOM_PERIODS {
-        let mut period_gains = HashMap::new();
+        if cycle % period_cycle_divisor(period) != 0 {
+            continue;
+        }
+        let mut period_gains = all_gains.remove(period).unwrap_or_default();
         for member_name in &member_names {
             match fetch_player_gains(member_name, period).await {
                 Ok(gains) => {
                     period_gains.insert(member_name.clone(), gains);
                 }
                 Err(err) => {
+                    // Leaves this member's previous figure in place rather
+                    // than dropping them from the period.
                     log::error!(
                         "Failed to fetch WOM gains for '{}' ({}): {}",
                         member_name,
@@ -414,10 +439,13 @@ pub fn start_wom_updater(db_pool: Pool) {
         // POST per cycle still cycles the whole group in under an hour,
         // which is ample for a daily recap.
         let mut update_cursor: usize = 0;
+        let mut cycle: u64 = 0;
 
         loop {
             interval.tick().await;
-            log::info!("Fetching WOM gains");
+            let cycle_now = cycle;
+            cycle = cycle.wrapping_add(1);
+            log::info!("Fetching WOM gains (cycle {})", cycle_now);
 
             match get_all_member_names(&db_pool).await {
                 Ok(names) if !names.is_empty() => {
@@ -432,7 +460,7 @@ pub fn start_wom_updater(db_pool: Pool) {
                 Err(err) => log::error!("Could not list members for WOM update: {}", err),
             }
 
-            if let Err(err) = update_wom_gains(&db_pool).await {
+            if let Err(err) = update_wom_gains(&db_pool, cycle_now).await {
                 log::error!("Failed to update WOM gains: {}", err);
             }
 
