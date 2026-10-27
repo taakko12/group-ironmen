@@ -10,6 +10,7 @@
 const customCommands = require('./customCommands');
 const commandLog = require('./commandLog');
 const reminders = require('./reminders');
+const quotes = require('./quotes');
 const watchdog = require('./watchdog');
 const itemData = require('./itemData');
 const { getGroupMembers } = require('./backendClient');
@@ -101,6 +102,7 @@ const builtins = {
       `\`${PREFIX}gear <boss>\` -- best setup from your own bank`,
       `\`${PREFIX}remind 80m herb run\` -- nags you later; \`${PREFIX}reminders\` lists them`,
       `\`${PREFIX}status\` -- is anything broken right now`,
+      `\`${PREFIX}addquote\` (as a reply) and \`${PREFIX}quote [search|#id]\` -- the quote book`,
       `\`${PREFIX}addcom ${PREFIX}name response\` -- add a custom command`,
       `Variables in custom commands: \`$(user)\` \`$(touser)\` \`$(query)\` \`$(count)\` \`$(rsn)\``,
     ].join('\n');
@@ -237,6 +239,66 @@ const builtins = {
       `:rotating_light: ${bad.length} of ${checks.length} checks failing`,
       ...bad.map((c) => `**${c.name}** — ${c.detail ?? 'down'}`),
     ].join('\n');
+  },
+
+  // Reply to a message with !addquote to save it; otherwise the text after
+  // the command is taken as the quote.
+  async addquote(args, message) {
+    let text = args;
+    let said = message.author.username;
+    let saidId = message.author.id;
+    let link = message.url;
+
+    const replyTo = message.reference?.messageId;
+    if (replyTo) {
+      try {
+        const target = await message.channel.messages.fetch(replyTo);
+        text = args || target.content;
+        said = target.author.username;
+        saidId = target.author.id;
+        link = target.url;
+      } catch {
+        return 'could not read the message you replied to';
+      }
+    }
+
+    if (!text) return `reply to a message with \`${PREFIX}addquote\`, or \`${PREFIX}addquote <text>\``;
+
+    const quote = quotes.add({ text, said, saidId, addedBy: message.author.username, messageLink: link });
+    if (!quote) return 'nothing to quote there';
+    if (quote.duplicate) return `already saved that one as #${quote.id}`;
+    return `saved #${quote.id}: "${quote.text}" — ${quote.said}`;
+  },
+
+  async quote(args) {
+    if (!quotes.count()) return `no quotes yet — reply to something with \`${PREFIX}addquote\``;
+
+    // A bare number is ambiguous: "!quote 500" could mean quote #500 or the
+    // one about 500 kc. Try the id, then fall back to searching, so a number
+    // that is not an id still finds the line people meant. An explicit "#2"
+    // is only ever an id, and says so when it is missing.
+    const search = args.trim();
+    const explicitId = /^#(\d+)$/.exec(search);
+    if (explicitId) {
+      const found = quotes.byId(Number(explicitId[1]));
+      return found
+        ? `**#${found.id}** "${found.text}" — ${found.said}, ${new Date(found.at).toLocaleDateString()}`
+        : `no quote #${explicitId[1]}`;
+    }
+
+    const bareId = /^(\d+)$/.exec(search);
+    const quote = (bareId && quotes.byId(Number(bareId[1]))) || quotes.random(search || undefined);
+    if (!quote) return search ? `nothing matches "${search}"` : 'no quotes yet';
+
+    const when = new Date(quote.at).toLocaleDateString();
+    return `**#${quote.id}** "${quote.text}" — ${quote.said}, ${when}`;
+  },
+
+  async delquote(args, message) {
+    if (!canManage(message)) return 'only someone who can manage messages here can delete a quote';
+    const id = parseInt(args, 10);
+    if (!Number.isInteger(id)) return `usage: \`${PREFIX}delquote <id>\``;
+    return quotes.remove(id) ? `deleted #${id}` : `no quote #${id}`;
   },
 
   async addcom(args, message) {

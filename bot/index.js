@@ -10,6 +10,7 @@ const customCommands = require('./customCommands');
 const commandLog = require('./commandLog');
 const httpServer = require('./httpServer');
 const reminders = require('./reminders');
+const quotes = require('./quotes');
 const watchdog = require('./watchdog');
 const bankPings = require('./bankPings');
 const attachmentRefresh = require('./attachmentRefresh');
@@ -48,6 +49,7 @@ client.once('clientReady', async () => {
   itemData.start();
   customCommands.warnIfEphemeral();
   commandLog.load();
+  quotes.load();
   // Gives the site something to read. The bot is a Discord client, so without
   // this its command history and health are only visible in Railway.
   httpServer.start(client);
