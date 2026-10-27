@@ -2,6 +2,18 @@ import { BaseElement } from "../base-element/base-element";
 import { api } from "../data/api";
 import { utility } from "../utility";
 
+// A drop with no date on it reads as "this card is broken" once it is a few
+// weeks old -- which is exactly how an 84-day-old drop looked, despite being
+// the honest most recent one. The death card already showed its date; this is
+// the same information in the form that makes staleness obvious at a glance.
+function ago(time) {
+  const days = (Date.now() - new Date(time).getTime()) / 86400000;
+  if (days < 1) return "today";
+  if (days < 2) return "yesterday";
+  if (days < 30) return `${Math.round(days)}d ago`;
+  return `${Math.round(days / 30)}mo ago`;
+}
+
 export class DashboardPage extends BaseElement {
   constructor() {
     super();
@@ -311,13 +323,19 @@ export class DashboardPage extends BaseElement {
   static recentDropHtml(drop) {
     if (!drop) return '<div class="dashboard-page__no-data">None recorded</div>';
     const imageUrl = drop.screenshot_url || drop.image_url;
-    const label = `${drop.item_name} (${drop.gp_value.toLocaleString()} gp)`;
+    const label = `${
+      drop.item_name
+    } (${drop.gp_value.toLocaleString()} gp) <span class="dashboard-page__when" title="${new Date(
+      drop.time
+    ).toLocaleString()}">${ago(drop.time)}</span>`;
     return DashboardPage.activityHtml(imageUrl, label, drop.message_link);
   }
 
   static recentDeathHtml(death) {
     if (!death) return '<div class="dashboard-page__no-data">None recorded</div>';
-    const label = new Date(death.time).toLocaleString();
+    const label = `${new Date(death.time).toLocaleDateString()} <span class="dashboard-page__when" title="${new Date(
+      death.time
+    ).toLocaleString()}">${ago(death.time)}</span>`;
     return DashboardPage.activityHtml(death.image_url, label, death.message_link);
   }
 

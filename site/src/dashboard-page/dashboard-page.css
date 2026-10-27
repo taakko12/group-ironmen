@@ -359,3 +359,11 @@ dashboard-page {
   font-style: italic;
   font-size: 0.9em;
 }
+
+/* Relative age next to a drop or death, so a months-old card reads as old
+   rather than as a card that stopped updating. */
+.dashboard-page__when {
+  opacity: 0.6;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
