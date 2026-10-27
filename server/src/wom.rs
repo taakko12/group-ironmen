@@ -202,6 +202,31 @@ async fn get_all_member_names(db_pool: &Pool) -> Result<Vec<String>, ApiError> {
     Ok(rows.into_iter().map(|row| row.try_get(0)).collect::<Result<_, _>>()?)
 }
 
+/// Asks WOM to re-check a player against the hiscores, which is the same
+/// thing its website's "update" button does.
+///
+/// Without this nothing ever causes WOM to take a snapshot, so the data is
+/// only as fresh as whatever else happens to update that player -- and a
+/// member whose own WOM sync is not running simply stops accumulating
+/// snapshots. `gained?period=day` then has no baseline inside the window and
+/// silently returns zero, which the daily recap reported as "quiet day" for a
+/// member who had actually earned 1.29M xp.
+async fn request_player_update(rsn: &str) -> Result<(), ApiError> {
+    let encoded_rsn = rsn.replace(' ', "%20");
+    let url = format!("{}/players/{}", WOM_BASE_URL, encoded_rsn);
+    let user_agent = wom_user_agent();
+
+    task::spawn_blocking(move || {
+        ureq::post(&url)
+            .header("User-Agent", &user_agent)
+            .send_empty()
+            .map(|_| ())
+            .map_err(ApiError::UreqError)
+    })
+    .await
+    .unwrap()
+}
+
 /// Fetches one player's absolute (not gained) boss kill counts, via the WOM
 /// player-details endpoint -- the /gained endpoint above only ever exposes
 /// deltas, never the running total, so dry-streak math needs this instead.
@@ -383,10 +408,29 @@ pub async fn update_wom_gains(db_pool: &Pool) -> Result<(), ApiError> {
 pub fn start_wom_updater(db_pool: Pool) {
     task::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(600));
+        // One player refreshed per cycle rather than all of them at once.
+        // WOM allows 20 requests a minute without an API key and this loop
+        // already spends ten of them on gains and boss kc; a single extra
+        // POST per cycle still cycles the whole group in under an hour,
+        // which is ample for a daily recap.
+        let mut update_cursor: usize = 0;
 
         loop {
             interval.tick().await;
             log::info!("Fetching WOM gains");
+
+            match get_all_member_names(&db_pool).await {
+                Ok(names) if !names.is_empty() => {
+                    let name = &names[update_cursor % names.len()];
+                    update_cursor = update_cursor.wrapping_add(1);
+                    match request_player_update(name).await {
+                        Ok(()) => log::info!("Requested WOM update for '{}'", name),
+                        Err(err) => log::warn!("WOM update for '{}' failed: {}", name, err),
+                    }
+                }
+                Ok(_) => {}
+                Err(err) => log::error!("Could not list members for WOM update: {}", err),
+            }
 
             if let Err(err) = update_wom_gains(&db_pool).await {
                 log::error!("Failed to update WOM gains: {}", err);
