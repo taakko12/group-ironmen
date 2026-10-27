@@ -5,7 +5,14 @@
 // narrative version: what they got, what killed them, what they moved in and
 // out of shared storage, and what they are fighting right this second.
 
-const { getLootData, getDeathData, getStorageLog, getLiveMembers } = require('./backendClient');
+const {
+  getLootData,
+  getDeathData,
+  getStorageLog,
+  getLiveMembers,
+  getWomGains,
+  getBossKc,
+} = require('./backendClient');
 
 const SHARED = '@SHARED';
 
@@ -111,4 +118,55 @@ async function getRecentActivity(member, days = 7) {
   };
 }
 
-module.exports = { getRecentActivity };
+module.exports = { getRecentActivity, getBossKillCounts };
+
+// Boss KC is its own question -- "how much zulrah have I done today" -- and
+// the model never connected it to a tool called get_skill_gains, whose
+// payload is also every skill for every member. This answers the narrow
+// question with a small payload, which matters on an 8k token/minute limit.
+async function getBossKillCounts({ member, boss, period = 'Day' } = {}) {
+  const normalise = (text) => text.toLowerCase().replace(/[\s_'-]/g, '');
+  const wantedMember = member ? normalise(member) : null;
+  const wantedBoss = boss ? normalise(boss) : null;
+  const matchName = (name, wanted) => {
+    if (!wanted) return true;
+    const candidate = normalise(name);
+    return candidate === wanted || candidate.startsWith(wanted) || candidate.includes(wanted);
+  };
+
+  const [gains, totals] = await Promise.all([
+    getWomGains(period).catch(() => ({})),
+    getBossKc().catch(() => ({})),
+  ]);
+
+  const rows = [];
+  for (const [name, data] of Object.entries(gains)) {
+    if (!matchName(name, wantedMember)) continue;
+
+    const gained = (data?.bosses_gained ?? []).filter((entry) => matchName(entry.name, wantedBoss));
+    // A boss asked about by name belongs in the answer even at zero kills --
+    // "none today" is the answer, and omitting it reads as missing data.
+    if (wantedBoss && gained.length === 0) {
+      const everKilled = Object.keys(totals[name] ?? {}).find((key) => matchName(key, wantedBoss));
+      rows.push({
+        member: name,
+        boss: everKilled ?? boss,
+        killsThisPeriod: 0,
+        totalKcEver: everKilled ? totals[name][everKilled] : null,
+      });
+      continue;
+    }
+
+    for (const entry of gained) {
+      const totalKey = Object.keys(totals[name] ?? {}).find((key) => matchName(key, entry.name));
+      rows.push({
+        member: name,
+        boss: entry.name,
+        killsThisPeriod: entry.kills,
+        totalKcEver: totalKey ? totals[name][totalKey] : null,
+      });
+    }
+  }
+
+  return { period, bossFilter: boss ?? null, rows };
+}
