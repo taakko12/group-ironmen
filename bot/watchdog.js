@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 
 const INTERVAL_MS = Number(process.env.WATCHDOG_INTERVAL_MS ?? 10 * 60 * 1000);
+const SLOW_INTERVAL_MS = Number(process.env.WATCHDOG_SLOW_INTERVAL_MS ?? 24 * 60 * 60 * 1000);
 const CHANNEL_ID = process.env.WATCHDOG_CHANNEL_ID || process.env.MUST_BANK_ANNOUNCE_CHANNEL_ID;
 const STATE_FILE =
   process.env.WATCHDOG_STATE_FILE || path.join(path.dirname(process.env.COMMANDS_FILE || __dirname), 'watchdog.json');
@@ -98,12 +99,17 @@ async function checkGroqModels() {
 async function checkDink() {
   try {
     const headers = { Authorization: GROUP_TOKEN };
+    // Twice the silence threshold, so a member right at the boundary still
+    // has their last drop inside the window.
+    const lootSince = new Date(Date.now() - DINK_SILENT_DAYS * 2 * 86400000).toISOString();
     const [members, loot] = await Promise.all([
       fetch(
         `${BACKEND_URL}/api/group/${GROUP_NAME}/get-group-data?from_time=2000-01-01T00:00:00Z&include_heavy=false`,
         { headers, signal: AbortSignal.timeout(25000) }
       ).then((r) => r.json()),
-      fetch(`${BACKEND_URL}/api/group/${GROUP_NAME}/get-loot-data`, {
+      // Windowed, not full history: this only reads the newest drop per
+      // member, and the unwindowed response is 99.6 KB and grows forever.
+      fetch(`${BACKEND_URL}/api/group/${GROUP_NAME}/get-loot-data?since=${encodeURIComponent(lootSince)}`, {
         headers,
         signal: AbortSignal.timeout(25000),
       }).then((r) => r.json()),
@@ -136,26 +142,37 @@ async function checkDink() {
   }
 }
 
-async function runChecks() {
-  const [backend, dps, groq, dink] = await Promise.all([
+/**
+ * Service reachability and model ids. Cheap enough to run every few minutes.
+ */
+async function runFastChecks() {
+  const [backend, dps, groq] = await Promise.all([
     reachable('backend', `${BACKEND_URL}/api/group/${GROUP_NAME}/am-i-logged-in`, {
       headers: { Authorization: GROUP_TOKEN },
     }),
     reachable('dps', `${DPS_URL}/health`),
     checkGroqModels(),
-    checkDink(),
   ]);
-  return [backend, dps, ...groq, ...dink];
+  return [backend, dps, ...groq];
+}
+
+/**
+ * Everything checkable, including the expensive one. Used by !status and once
+ * a day by the poller.
+ */
+async function runChecks() {
+  const [fast, dink] = await Promise.all([runFastChecks(), checkDink()]);
+  return [...fast, ...dink];
 }
 
 function describe(check) {
   return check.detail ? `**${check.name}** — ${check.detail}` : `**${check.name}**`;
 }
 
-async function pollOnce(client) {
+async function pollOnce(client, { includeSlow = false } = {}) {
   if (!CHANNEL_ID) return;
 
-  const checks = await runChecks();
+  const checks = includeSlow ? await runChecks() : await runFastChecks();
   const broke = [];
   const fixed = [];
 
@@ -172,9 +189,13 @@ async function pollOnce(client) {
   }
 
   // Checks can disappear (a member stops playing), and a stale entry would
-  // fire a spurious "recovered" the next time they come back.
-  for (const name of Object.keys(previous)) {
-    if (!checks.some((check) => check.name === name)) delete previous[name];
+  // fire a spurious "recovered" the next time they come back. Only prune what
+  // this run actually looked at -- a fast run has no dink: entries, and
+  // dropping them would re-alert every single day.
+  if (includeSlow) {
+    for (const name of Object.keys(previous)) {
+      if (!checks.some((check) => check.name === name)) delete previous[name];
+    }
   }
   saveState();
 
@@ -198,9 +219,15 @@ function start(client) {
     return;
   }
   loadState();
-  const run = () => pollOnce(client).catch((err) => console.error(`[watchdog] ${err.message}`));
-  run();
-  setInterval(run, INTERVAL_MS);
+
+  // The Dink check compares against a 30-day threshold but used to run on the
+  // 10-minute loop, pulling the group's whole loot history 144 times a day --
+  // 15 MB of egress to answer a question that changes at most once a day.
+  const run = (includeSlow) =>
+    pollOnce(client, { includeSlow }).catch((err) => console.error(`[watchdog] ${err.message}`));
+  run(true);
+  setInterval(() => run(false), INTERVAL_MS);
+  setInterval(() => run(true), SLOW_INTERVAL_MS);
 }
 
-module.exports = { start, runChecks };
+module.exports = { start, runChecks, runFastChecks };

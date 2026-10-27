@@ -12,6 +12,7 @@ const httpServer = require('./httpServer');
 const reminders = require('./reminders');
 const quotes = require('./quotes');
 const watchdog = require('./watchdog');
+const dailyRecap = require('./dailyRecap');
 const bankPings = require('./bankPings');
 const attachmentRefresh = require('./attachmentRefresh');
 const mustBankAnnounce = require('./mustBankAnnounce');
@@ -58,6 +59,7 @@ client.once('clientReady', async () => {
   mustBankAnnounce.start(client);
   reminders.start(client);
   watchdog.start(client);
+  dailyRecap.start(client);
 });
 
 client.on('interactionCreate', async (interaction) => {
