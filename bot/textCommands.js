@@ -423,9 +423,15 @@ function onCooldown(key) {
 async function handle(message) {
   if (!message.content.startsWith(PREFIX)) return false;
 
-  const [rawName, ...rest] = message.content.slice(PREFIX.length).split(/\s+/);
-  const name = customCommands.normalise(rawName);
-  const args = rest.join(' ').trim();
+  // Take the name off the front and leave the rest exactly as typed. Splitting
+  // on /\s+/ and rejoining with ' ' collapsed every newline before any command
+  // could see it, so a pasted markdown note arrived as one line and its
+  // headings and rules ended up mid-paragraph, rendering literally. Commands
+  // that want words still split `args` themselves.
+  const match = message.content.slice(PREFIX.length).match(/^(\S+)([\s\S]*)$/);
+  if (!match) return false;
+  const name = customCommands.normalise(match[1]);
+  const args = match[2].trim();
   if (!name) return false;
 
   const builtin = builtins[name];
