@@ -14,7 +14,7 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b';
 const ROAST_CHANCE = Number(process.env.DEATH_ROAST_CHANCE ?? 0.3);
 
-async function generateRoast(imageUrl) {
+async function generateRoast(imageUrl, memberName) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -30,7 +30,16 @@ async function generateRoast(imageUrl) {
           content: [
             {
               type: 'text',
-              text: 'This screenshot shows a group member who just died in-game. Roast them for it, in character, in one short line.',
+              // The name has to be in the prompt. Given only "a group member
+              // died", the model picks one at random off the trait list in
+              // SYSTEM_PROMPT -- which is how a Saint Bosh death got roasted
+              // as "I see Nash tried to remember what a rune was". The same
+              // failure is noted in assistant.js for the restyle pass.
+              text:
+                `${memberName} just died in-game, as shown in this screenshot. ` +
+                `Roast ${memberName} for it, in character, in one short line. ` +
+                `Do not name or blame any other member -- ${memberName} is the one who died. ` +
+                `Do not start the line with their name; it is already shown.`,
             },
             { type: 'image_url', image_url: { url: imageUrl } },
           ],
@@ -60,7 +69,7 @@ async function maybeRoastDeath(message, death) {
   if (Math.random() >= ROAST_CHANCE) return;
 
   try {
-    const roast = await generateRoast(death.image_url);
+    const roast = await generateRoast(death.image_url, death.member_name);
     if (!roast) return;
 
     await message.channel.send(`**${death.member_name}** ${roast}`);
@@ -69,4 +78,4 @@ async function maybeRoastDeath(message, death) {
   }
 }
 
-module.exports = { maybeRoastDeath };
+module.exports = { maybeRoastDeath, generateRoast };
