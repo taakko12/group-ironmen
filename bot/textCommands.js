@@ -192,16 +192,33 @@ const builtins = {
     const result = await response.json().catch(() => ({}));
     if (!response.ok) return `planner said: ${result.error ?? response.status}`;
 
-    const worn = Object.entries(result.plan.worn).map(([slot, item]) => `${slot}: ${item}`);
     const label = target.version ? `${target.name} [${target.version}]` : target.name;
-    return [
-      `**${rsn} vs ${label}** — ${result.plan.score.toFixed(2)} dps`,
-      worn.join(', '),
-      result.plan.carried.length ? `carry: ${result.plan.carried.map((c) => c.name).join(', ')}` : '',
-      '_levels assumed maxed; mechanics not modelled_',
-    ]
-      .filter(Boolean)
-      .join('\n');
+
+    // Drawn rather than listed: a worn/carry word list makes you translate it
+    // in your head, and the equipment panel is how the game already shows it.
+    try {
+      const png = await renderGearPlan(result.plan, { member: rsn, label });
+      await message.reply({
+        files: [new AttachmentBuilder(png, { name: 'gear.png' })],
+        allowedMentions: { parse: [] },
+      });
+      return null;
+    } catch (err) {
+      // Said out loud rather than only to stderr: Railway's logs scroll, and
+      // a silent fall back to text is indistinguishable from the image
+      // feature never having shipped -- which is exactly how this went
+      // unnoticed the first time.
+      console.error(`[commands] could not draw the gear plan: ${err.stack ?? err.message}`);
+      const worn = Object.entries(result.plan.worn).map(([slot, item]) => `${slot}: ${item}`);
+      return [
+        `**${rsn} vs ${label}** — ${result.plan.score.toFixed(2)} dps`,
+        worn.join(', '),
+        result.plan.carried.length ? `carry: ${result.plan.carried.map((c) => c.name).join(', ')}` : '',
+        `_(could not draw the image: ${err.message})_`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
   },
 
   async remind(args, message) {

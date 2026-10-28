@@ -21,6 +21,22 @@ const EQUIP_WIDTH = 175;
 const EQUIP_HEIGHT = 200;
 const COLUMN_GAP = 46;
 const WIDTH = PADDING * 2 + INV_WIDTH + COLUMN_GAP + EQUIP_WIDTH;
+// A single-target plan has nothing to switch to, and 28 empty cells next to
+// the gear reads as a failed render rather than as "carry nothing".
+const NARROW_WIDTH = PADDING * 2 + EQUIP_WIDTH;
+
+// The equipment panel alone is narrower than the title above it, so the
+// narrow layout has to grow to whatever the text needs or the header is
+// drawn clipped off both edges.
+function measuredWidth(lines) {
+  const ctx = createCanvas(1, 1).getContext('2d');
+  let widest = 0;
+  for (const [text, font] of lines) {
+    ctx.font = font;
+    widest = Math.max(widest, ctx.measureText(text).width);
+  }
+  return Math.ceil(widest) + PADDING * 2;
+}
 
 // Same reasoning as the other renderers: Discord downscales the inline
 // preview and softens pixel fonts, so draw at 2x.
@@ -148,7 +164,7 @@ function drawHeader(ctx, width, height, title, subtitle) {
   ctx.strokeRect(2, 2, width - 4, height - 4);
 }
 
-function drawPerFight(ctx, perMonster, top) {
+function drawPerFight(ctx, perMonster, top, width) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
@@ -160,7 +176,7 @@ function drawPerFight(ctx, perMonster, top) {
 
     ctx.textAlign = 'right';
     ctx.fillStyle = COLOR_VALUE;
-    ctx.fillText(`${fight.dps.toFixed(2)} dps`, WIDTH - PADDING, y);
+    ctx.fillText(`${fight.dps.toFixed(2)} dps`, width - PADDING, y);
     ctx.textAlign = 'left';
     y += 19;
   }
@@ -172,33 +188,49 @@ function drawPerFight(ctx, perMonster, top) {
  * @param meta { member, label } who this is for and what they are fighting
  */
 async function renderGearPlan(plan, { member, label }) {
+  const carried = plan.carried ?? [];
+  const showInventory = carried.length > 0;
+
+  const title = `${member} vs ${label}`;
+  const subtitle = showInventory
+    ? `${plan.score.toFixed(2)} avg dps · ${plan.switches} inventory slot${plan.switches === 1 ? '' : 's'}`
+    : `${plan.score.toFixed(2)} dps · no switches`;
+  const width = showInventory
+    ? WIDTH
+    : Math.max(
+        NARROW_WIDTH,
+        measuredWidth([
+          [title, '22px rsbold'],
+          [subtitle, '17px rsbold'],
+          ['levels assumed maxed · mechanics not modelled', '13px rssmall'],
+        ])
+      );
+
   const panelTop = HEADER_HEIGHT + 30;
-  const panelsHeight = Math.max(INV_HEIGHT, EQUIP_HEIGHT);
+  const panelsHeight = showInventory ? Math.max(INV_HEIGHT, EQUIP_HEIGHT) : EQUIP_HEIGHT;
   const fightsHeight = Math.min(plan.perMonster.length, 6) * 19 + 14;
   const height = panelTop + panelsHeight + 18 + fightsHeight + 26;
 
-  const canvas = createCanvas(WIDTH * SCALE, height * SCALE);
+  const canvas = createCanvas(width * SCALE, height * SCALE);
   const ctx = canvas.getContext('2d');
   ctx.scale(SCALE, SCALE);
 
-  drawHeader(
-    ctx,
-    WIDTH,
-    height,
-    `${member} vs ${label}`,
-    `${plan.score.toFixed(2)} avg dps · ${plan.switches} inventory slot${plan.switches === 1 ? '' : 's'}`
-  );
+  drawHeader(ctx, width, height, title, subtitle);
 
-  await drawInventory(ctx, plan.carried ?? [], PADDING, panelTop);
-  await drawEquipment(ctx, plan.wornIds ?? {}, PADDING + INV_WIDTH + COLUMN_GAP, panelTop);
+  if (showInventory) {
+    await drawInventory(ctx, carried, PADDING, panelTop);
+    await drawEquipment(ctx, plan.wornIds ?? {}, PADDING + INV_WIDTH + COLUMN_GAP, panelTop);
+  } else {
+    await drawEquipment(ctx, plan.wornIds ?? {}, (width - EQUIP_WIDTH) / 2, panelTop);
+  }
 
   const fightsTop = panelTop + panelsHeight + 26;
-  const afterFights = drawPerFight(ctx, plan.perMonster ?? [], fightsTop);
+  const afterFights = drawPerFight(ctx, plan.perMonster ?? [], fightsTop, width);
 
   ctx.textAlign = 'center';
   ctx.fillStyle = COLOR_MUTED;
   ctx.font = '13px rssmall';
-  ctx.fillText('levels assumed maxed · mechanics not modelled', WIDTH / 2, afterFights + 4);
+  ctx.fillText('levels assumed maxed · mechanics not modelled', width / 2, afterFights + 4);
 
   return canvas.encode('png');
 }
