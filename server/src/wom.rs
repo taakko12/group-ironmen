@@ -93,6 +93,13 @@ fn wom_user_agent() -> String {
     std::env::var("WOM_USER_AGENT").unwrap_or_else(|_| "group-ironmen-tracker".to_string())
 }
 
+/// WOM allows 20 requests a minute unauthenticated and 100 with a key, which
+/// is the difference between this loop having to ration its calls and not.
+/// Optional on purpose -- unset still works, just slower.
+fn wom_api_key() -> Option<String> {
+    std::env::var("WOM_API_KEY").ok().filter(|key| !key.is_empty())
+}
+
 fn display_name(wom_metric_key: &str) -> String {
     wom_metric_key
         .split('_')
@@ -120,8 +127,11 @@ async fn fetch_player_gains(rsn: &str, period: &str) -> Result<WomPlayerGains, A
     let user_agent = wom_user_agent();
 
     let response: WomGainedResponse = task::spawn_blocking(move || {
-        ureq::get(&url)
-            .header("User-Agent", &user_agent)
+        let mut request = ureq::get(&url).header("User-Agent", &user_agent);
+        if let Some(key) = wom_api_key() {
+            request = request.header("x-api-key", &key);
+        }
+        request
             .call()
             .map_err(ApiError::UreqError)?
             .body_mut()
@@ -217,8 +227,11 @@ async fn request_player_update(rsn: &str) -> Result<(), ApiError> {
     let user_agent = wom_user_agent();
 
     task::spawn_blocking(move || {
-        ureq::post(&url)
-            .header("User-Agent", &user_agent)
+        let mut request = ureq::post(&url).header("User-Agent", &user_agent);
+        if let Some(key) = wom_api_key() {
+            request = request.header("x-api-key", &key);
+        }
+        request
             .send_empty()
             .map(|_| ())
             .map_err(ApiError::UreqError)
@@ -236,8 +249,11 @@ async fn fetch_player_boss_kc(rsn: &str) -> Result<HashMap<String, i64>, ApiErro
     let user_agent = wom_user_agent();
 
     let response: WomPlayerDetailsResponse = task::spawn_blocking(move || {
-        ureq::get(&url)
-            .header("User-Agent", &user_agent)
+        let mut request = ureq::get(&url).header("User-Agent", &user_agent);
+        if let Some(key) = wom_api_key() {
+            request = request.header("x-api-key", &key);
+        }
+        request
             .call()
             .map_err(ApiError::UreqError)?
             .body_mut()
@@ -325,8 +341,11 @@ async fn fetch_player_boss_timeline(
     let user_agent = wom_user_agent();
 
     task::spawn_blocking(move || {
-        ureq::get(&url)
-            .header("User-Agent", &user_agent)
+        let mut request = ureq::get(&url).header("User-Agent", &user_agent);
+        if let Some(key) = wom_api_key() {
+            request = request.header("x-api-key", &key);
+        }
+        request
             .call()
             .map_err(ApiError::UreqError)?
             .body_mut()
