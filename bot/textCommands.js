@@ -15,6 +15,8 @@ const watchdog = require('./watchdog');
 const itemData = require('./itemData');
 const { getGroupMembers } = require('./backendClient');
 const { getRsnForDiscordId } = require('./memberCache');
+const { renderGearPlan } = require('./gearImage');
+const { AttachmentBuilder } = require('discord.js');
 
 const PREFIX = '!';
 // Per command, per channel. Enough to stop one person spamming !price in a
