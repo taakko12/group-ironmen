@@ -216,10 +216,16 @@ const builtins = {
     // A trailing bare number is the switch budget: "gear zulrah 4". Bosses are
     // named with words, and the versions that carry digits ("Ocellus P1") keep
     // them glued to a letter, so a standalone number is unambiguous.
-    const budgetMatch = args.match(/^(.*?)\s+(\d{1,2})$/);
-    const query = (budgetMatch?.[1] ?? args).trim();
+    // "mine" plans off your own bank; the default pools the group's gear,
+    // because a group ironman's scythe lives wherever it dropped.
+    const mineOnly = /(^|\s)mine$/i.test(args);
+    const rest = args.replace(/(^|\s)mine$/i, '').trim();
+
+    const budgetMatch = rest.match(/^(.*?)\s+(\d{1,2})$/);
+    const query = (budgetMatch?.[1] ?? rest).trim();
     const budget = budgetMatch ? Number(budgetMatch[2]) : DEFAULT_SWITCHES;
-    if (budget > 28) return 'an inventory is 28 slots, and you need some of them for food';
+    // The planner clamps at 12, so a bigger number would be silently ignored.
+    if (budget > 12) return 'the planner tops out at 12 switches';
 
     const search = await fetch(`${DPS_URL}/monsters?q=${encodeURIComponent(query)}`, {
       headers: { Authorization: process.env.GROUP_TOKEN },
@@ -229,14 +235,6 @@ const builtins = {
     if (!matches.length) return `no boss matches "${query}"`;
 
     const targets = phasesOf(matches[0].name, matches);
-    const response = await fetch(`${DPS_URL}/plan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: process.env.GROUP_TOKEN },
-      body: JSON.stringify({ member: rsn, targets, budget, weapons: 10 }),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) return `planner said: ${result.error ?? response.status}`;
-
     const label =
       targets.length > 1
         ? `${targets[0].name} (${targets.length} phases)`
@@ -244,14 +242,46 @@ const builtins = {
           ? `${targets[0].name} [${targets[0].version}]`
           : targets[0].name;
 
+    // The group's pool is roughly three times one bank, and the weapon cap is
+    // not a preference but a correctness floor here: at 10, the extra weapons
+    // displace good ones during ranking and a group plan scored WORSE than
+    // the same person's own bank. 20 is where that stops (7.87 vs 6.93 at
+    // Zulrah) and more buys nothing.
+    const weapons = mineOnly ? 10 : 20;
+
+    // That search runs about a minute on the group pool. A command that sits
+    // silent that long reads as broken, so say what is happening and replace
+    // it with the picture when it lands.
+    const pending = await message
+      .reply({
+        content: `planning ${label} across ${mineOnly ? 'your bank' : "the group's gear"}…`,
+        allowedMentions: { parse: [] },
+      })
+      .catch(() => null);
+
+    const response = await fetch(`${DPS_URL}/plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: process.env.GROUP_TOKEN },
+      body: JSON.stringify({ member: rsn, targets, budget, weapons, pool: mineOnly ? 'mine' : 'group' }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const why = `planner said: ${result.error ?? response.status}`;
+      if (pending) return void (await pending.edit({ content: why }));
+      return why;
+    }
+
     // Drawn rather than listed: a worn/carry word list makes you translate it
     // in your head, and the equipment panel is how the game already shows it.
     try {
-      const png = await renderGearPlan(result.plan, { member: rsn, label });
-      await message.reply({
+      const png = await renderGearPlan(result.plan, { member: rsn, label, borrowed: result.borrowed ?? [] });
+      const payload = {
+        content: '',
         files: [new AttachmentBuilder(png, { name: 'gear.png' })],
         allowedMentions: { parse: [] },
-      });
+      };
+      if (pending) await pending.edit(payload);
+      else await message.reply(payload);
       return null;
     } catch (err) {
       // Said out loud rather than only to stderr: Railway's logs scroll, and
@@ -260,14 +290,21 @@ const builtins = {
       // unnoticed the first time.
       console.error(`[commands] could not draw the gear plan: ${err.stack ?? err.message}`);
       const worn = Object.entries(result.plan.worn).map(([slot, item]) => `${slot}: ${item}`);
-      return [
+      const borrow = (result.borrowed ?? []).filter((b) => b.from.length);
+      const text = [
         `**${rsn} vs ${label}** — ${result.plan.score.toFixed(2)} dps`,
         worn.join(', '),
         result.plan.carried.length ? `carry: ${result.plan.carried.map((c) => c.name).join(', ')}` : '',
+        borrow.length ? `borrow: ${borrow.map((b) => `${b.name} (${b.from[0]})`).join(', ')}` : '',
         `_(could not draw the image: ${err.message})_`,
       ]
         .filter(Boolean)
         .join('\n');
+
+      // Replace the placeholder rather than leaving it stranded above a
+      // second message.
+      if (pending) return void (await pending.edit({ content: text.slice(0, 1900) }));
+      return text;
     }
   },
 

@@ -49,6 +49,9 @@ const COLOR_NAME = '#ffffff';
 const COLOR_VALUE = '#ffff00';
 const COLOR_SUBTEXT = '#d8d8d8';
 const COLOR_MUTED = '#8a8a8a';
+// Borrowed gear is an action for the reader, not a footnote, so it does not
+// get the muted grey the caveat line uses.
+const COLOR_BORROW = '#9ad6ff';
 const COLOR_SLOT = 'rgba(255, 255, 255, 0.05)';
 const COLOR_SLOT_EDGE = 'rgba(255, 255, 255, 0.10)';
 
@@ -187,7 +190,31 @@ function drawPerFight(ctx, perMonster, top, width) {
  * @param plan the `plan` object from the dps service's /plan response
  * @param meta { member, label } who this is for and what they are fighting
  */
-async function renderGearPlan(plan, { member, label }) {
+/**
+ * "Scythe of vitur (Nash), Twisted bow (Saint Bosh)" -- a plan drawn from the
+ * group's pool is useless without knowing whose bank to go to.
+ */
+function borrowLines(borrowed, width, ctx) {
+  const parts = borrowed.filter((b) => b.from.length).map((b) => `${b.name} (${b.from[0]})`);
+  if (!parts.length) return [];
+
+  ctx.font = '13px rssmall';
+  const lines = [];
+  let current = 'borrow: ';
+  for (const part of parts) {
+    const candidate = current === 'borrow: ' ? current + part : `${current}, ${part}`;
+    if (ctx.measureText(candidate).width > width - PADDING * 2 && current !== 'borrow: ') {
+      lines.push(current);
+      current = `  ${part}`;
+    } else {
+      current = candidate;
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
+async function renderGearPlan(plan, { member, label, borrowed = [] }) {
   const carried = plan.carried ?? [];
   const showInventory = carried.length > 0;
 
@@ -210,10 +237,14 @@ async function renderGearPlan(plan, { member, label }) {
         ])
       );
 
+  // Wrapping needs text metrics, and the metrics decide the height, so lay the
+  // borrow note out on a scratch context before the real canvas is sized.
+  const borrowed2 = borrowLines(borrowed, width, createCanvas(1, 1).getContext('2d'));
+
   const panelTop = HEADER_HEIGHT + 30;
   const panelsHeight = showInventory ? Math.max(INV_HEIGHT, EQUIP_HEIGHT) : EQUIP_HEIGHT;
   const fightsHeight = Math.min(plan.perMonster.length, 6) * 19 + 14;
-  const height = panelTop + panelsHeight + 18 + fightsHeight + 26;
+  const height = panelTop + panelsHeight + 18 + fightsHeight + borrowed2.length * 16 + 26;
 
   const canvas = createCanvas(width * SCALE, height * SCALE);
   const ctx = canvas.getContext('2d');
@@ -229,12 +260,23 @@ async function renderGearPlan(plan, { member, label }) {
   }
 
   const fightsTop = panelTop + panelsHeight + 26;
-  const afterFights = drawPerFight(ctx, plan.perMonster ?? [], fightsTop, width);
+  let y = drawPerFight(ctx, plan.perMonster ?? [], fightsTop, width);
+
+  if (borrowed2.length) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = COLOR_BORROW;
+    ctx.font = '13px rssmall';
+    for (const line of borrowed2) {
+      ctx.fillText(line, PADDING, y);
+      y += 16;
+    }
+  }
 
   ctx.textAlign = 'center';
   ctx.fillStyle = COLOR_MUTED;
   ctx.font = '13px rssmall';
-  ctx.fillText('levels assumed maxed · mechanics not modelled', width / 2, afterFights + 4);
+  ctx.fillText('levels assumed maxed · mechanics not modelled', width / 2, y + 4);
 
   return canvas.encode('png');
 }

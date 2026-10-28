@@ -85,9 +85,31 @@ async function handlePlan(body: Record<string, unknown>) {
   const member = group.find((m) => m.name.toLowerCase() === memberName.toLowerCase());
   if (!member) throw new HttpError(404, `no member "${memberName}"`);
 
-  const owned = [
-    ...new Set([...itemIds(member.bank), ...itemIds(member.equipment), ...itemIds(member.inventory)]),
-  ];
+  const heldBy = (m: Member) =>
+    new Set([...itemIds(m.bank), ...itemIds(m.equipment), ...itemIds(m.inventory)]);
+
+  const mine = heldBy(member);
+
+  // A group ironman's gear is shared in practice -- the scythe lives in
+  // whoever's bank it dropped in -- so planning against one person's bank
+  // understates what the team can actually field. `pool: "group"` unions
+  // everyone, and `owners` records who holds what so the answer can say where
+  // to go and get it rather than listing gear the asker has never seen.
+  //
+  // What this does NOT model: two people cannot wear the same scythe. These
+  // are plans for one person at a time, so that only bites if the whole team
+  // plans off a single borrowed item.
+  const owners = new Map<number, string[]>();
+  if (body.pool === "group") {
+    for (const other of group) {
+      for (const id of heldBy(other)) {
+        if (!owners.has(id)) owners.set(id, []);
+        owners.get(id)!.push(other.name);
+      }
+    }
+  }
+
+  const owned = owners.size ? [...owners.keys()] : [...mine];
 
   const targets: MonsterTarget[] = targetNames.map((entry) => {
     const spec =
@@ -107,7 +129,10 @@ async function handlePlan(body: Record<string, unknown>) {
   // Locks arrive as names: ids are not something anyone types by hand.
   const lockedIds = (Array.isArray(body.lock) ? (body.lock as string[]) : []).map((name) => {
     const match = owned.find((id) => equipmentById(id)?.name.toLowerCase() === String(name).toLowerCase());
-    if (!match) throw new HttpError(400, `"${name}" is not equipment ${member.name} owns`);
+    if (!match) {
+      const whose = owners.size ? "the group owns" : `${member.name} owns`;
+      throw new HttpError(400, `"${name}" is not equipment ${whose}`);
+    }
     return match;
   });
 
@@ -129,6 +154,19 @@ async function handlePlan(body: Record<string, unknown>) {
     "Raid mechanics and positioning are not modelled.",
   ];
 
+  /** Gear in the plan that the asker does not hold, and who does. */
+  const borrowedFor = (plan: { wornIds: Record<string, number>; carried: { itemId: number }[] }) => {
+    const ids = new Set([...Object.values(plan.wornIds), ...plan.carried.map((c) => c.itemId)]);
+    return [...ids]
+      .filter((id) => !mine.has(id))
+      .map((id) => ({
+        name: equipmentById(id)?.name ?? String(id),
+        // The holder is never the asker here, so an empty list cannot happen
+        // for a group pool -- but filter anyway so a self-plan stays sane.
+        from: (owners.get(id) ?? []).filter((who) => who !== member.name),
+      }));
+  };
+
   if (body.curve) {
     const steps = budgetCurve(owned, targets, options);
     const fewest = fewestSwitchesFor(steps);
@@ -138,11 +176,13 @@ async function handlePlan(body: Record<string, unknown>) {
       curve: steps.map((s) => ({ budget: s.budget, score: s.plan.score, marginal: s.marginal })),
       recommendedBudget: fewest.budget,
       plan: fewest.plan,
+      borrowed: borrowedFor(fewest.plan),
       caveats,
     };
   }
 
-  return { member: member.name, poolSize: owned.length, plan: planSwitches(owned, targets, options), caveats };
+  const plan = planSwitches(owned, targets, options);
+  return { member: member.name, poolSize: owned.length, plan, borrowed: borrowedFor(plan), caveats };
 }
 
 const server = http.createServer(async (request, response) => {
