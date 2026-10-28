@@ -108,6 +108,10 @@ async function askerRsn(message) {
 // "Dragon Slayer II" correctly without needing to know it is a quest name.
 const VARIANT_VERSION = /quest|awakened|challenge mode|entry mode|hard mode/i;
 
+// Switch slots the planner may spend when nobody says otherwise. Enough for a
+// real multi-phase setup without eating the inventory; override per call.
+const DEFAULT_SWITCHES = 6;
+
 function phasesOf(name, matches) {
   const versions = matches.filter((m) => m.name === name);
   const areVariants = versions.some((m) => VARIANT_VERSION.test(m.version ?? ''));
@@ -204,23 +208,31 @@ const builtins = {
   },
 
   async gear(args, message) {
-    if (!args) return `usage: \`${PREFIX}gear <boss>\` — e.g. \`${PREFIX}gear vorkath\``;
+    if (!args) return `usage: \`${PREFIX}gear <boss> [switches]\` — e.g. \`${PREFIX}gear vorkath 4\``;
 
     const rsn = await askerRsn(message);
     if (!rsn) return 'link your RSN on the site first (edit member -> discord id) so I know whose bank to use';
 
-    const search = await fetch(`${DPS_URL}/monsters?q=${encodeURIComponent(args)}`, {
+    // A trailing bare number is the switch budget: "gear zulrah 4". Bosses are
+    // named with words, and the versions that carry digits ("Ocellus P1") keep
+    // them glued to a letter, so a standalone number is unambiguous.
+    const budgetMatch = args.match(/^(.*?)\s+(\d{1,2})$/);
+    const query = (budgetMatch?.[1] ?? args).trim();
+    const budget = budgetMatch ? Number(budgetMatch[2]) : DEFAULT_SWITCHES;
+    if (budget > 28) return 'an inventory is 28 slots, and you need some of them for food';
+
+    const search = await fetch(`${DPS_URL}/monsters?q=${encodeURIComponent(query)}`, {
       headers: { Authorization: process.env.GROUP_TOKEN },
     });
     if (!search.ok) return `the planner is not answering (${search.status})`;
     const { matches } = await search.json();
-    if (!matches.length) return `no boss matches "${args}"`;
+    if (!matches.length) return `no boss matches "${query}"`;
 
     const targets = phasesOf(matches[0].name, matches);
     const response = await fetch(`${DPS_URL}/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: process.env.GROUP_TOKEN },
-      body: JSON.stringify({ member: rsn, targets, budget: 6, weapons: 10 }),
+      body: JSON.stringify({ member: rsn, targets, budget, weapons: 10 }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) return `planner said: ${result.error ?? response.status}`;
