@@ -17,6 +17,7 @@ const { getGroupMembers } = require('./backendClient');
 const { getRsnForDiscordId } = require('./memberCache');
 const { renderGearPlan } = require('./gearImage');
 const { AttachmentBuilder } = require('discord.js');
+const { renderMarkdown, looksLikeDocument } = require('./markdownEmbed');
 
 const PREFIX = '!';
 // Per command, per channel. Enough to stop one person spamming !price in a
@@ -358,13 +359,31 @@ const builtins = {
   },
 
   async addcom(args, message) {
-    const [name, ...rest] = args.split(/\s+/);
-    const response = rest.join(' ');
-    if (!name || !response) return `usage: \`${PREFIX}addcom ${PREFIX}name response\``;
+    // Split the name off the first whitespace and keep the rest verbatim.
+    // The old split(/\s+/) + join(' ') flattened every newline, which quietly
+    // turned a structured note into one unreadable line.
+    const match = args.match(/^(\S+)\s*([\s\S]*)$/);
+    const name = match?.[1];
+    let response = match?.[2] ?? '';
+
+    // A Discord message caps at 2000 characters including the command itself,
+    // so a note of any real length cannot be typed inline. Take it from an
+    // attached file instead.
+    const file = message.attachments?.find?.((a) => /\.(md|txt)$/i.test(a.name ?? ''));
+    if (file) {
+      const fetched = await fetch(file.url);
+      if (!fetched.ok) return `could not read ${file.name} (${fetched.status})`;
+      response = await fetched.text();
+    }
+
+    if (!name || !response.trim()) {
+      return `usage: \`${PREFIX}addcom ${PREFIX}name response\` — or attach a .md file for a long one`;
+    }
     if (builtins[customCommands.normalise(name)]) return `${name} is a built-in, pick another name`;
 
     const replaced = customCommands.set(name, response, message.author.username);
-    return `${replaced ? 'updated' : 'added'} \`${PREFIX}${customCommands.normalise(name)}\``;
+    const how = looksLikeDocument(response) ? ', posts as an embed' : '';
+    return `${replaced ? 'updated' : 'added'} \`${PREFIX}${customCommands.normalise(name)}\`${how}`;
   },
 
   // Deleting is the one action nobody can undo, so it needs a role the whole
@@ -422,7 +441,18 @@ async function handle(message) {
 
   try {
     const reply = builtin ? await builtin(args, message) : await substitute(custom.response, { name, args, message });
-    if (reply) await message.reply({ content: reply.slice(0, 1900), allowedMentions: { parse: [] } });
+    if (reply && looksLikeDocument(reply)) {
+      const { embeds, overflow } = renderMarkdown(reply, { title: `${PREFIX}${name}` });
+      await message.reply({
+        embeds,
+        // Nothing is dropped silently: what a message cannot hold comes back
+        // as a file, which is also how it went in.
+        files: overflow ? [new AttachmentBuilder(Buffer.from(overflow, 'utf8'), { name: `${name}.md` })] : [],
+        allowedMentions: { parse: [] },
+      });
+    } else if (reply) {
+      await message.reply({ content: reply.slice(0, 1900), allowedMentions: { parse: [] } });
+    }
     commandLog.record({ ...entry, reply, ok: true, ms: Date.now() - started });
   } catch (err) {
     console.error(`[commands] ${name} failed: ${err.message}`);
