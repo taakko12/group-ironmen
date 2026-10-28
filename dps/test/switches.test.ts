@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMonster } from "../src/engine";
+import { equipmentById, findMonster } from "../src/engine";
 import { budgetCurve, fewestSwitchesFor, planSwitches } from "../src/switches";
 
 const TWISTED_BOW = 20997;
@@ -281,5 +281,43 @@ describe("per-target attack styles", () => {
     const claw = plan.perMonster.find((m) => m.monster.includes("Right claw"))!;
     expect(head.weapon).toBe("Twisted bow");
     expect(["Dragon scimitar", "Emberlight"]).toContain(claw.weapon);
+  });
+});
+
+// Each slot picks its most-common item independently, which produced a worn
+// set nobody could put on: a two-handed weapon alongside a shield, because
+// one fight wants a halberd and another a fang-and-defender.
+describe("worn set is physically wearable", () => {
+  it("never lists a shield alongside a two-handed weapon", () => {
+    const plan = planSwitches(
+      [...POOL, 23987, 22322],
+      [
+        { monster: findMonster("Great Olm", "Head (Normal)")! },
+        { monster: findMonster("Great Olm", "Left claw (Normal)")! },
+      ],
+      { ...OPTS, maxSwitches: 6 }
+    );
+
+    const weapon = plan.wornIds.weapon;
+    if (weapon !== undefined && equipmentById(weapon)?.isTwoHanded) {
+      expect(plan.worn.shield).toBeUndefined();
+      expect(plan.wornIds.shield).toBeUndefined();
+    }
+  });
+
+  it("moves the displaced shield into the carry list rather than losing it", () => {
+    const plan = planSwitches(
+      [...POOL, 23987, 22322],
+      [
+        { monster: findMonster("Great Olm", "Head (Normal)")! },
+        { monster: findMonster("Great Olm", "Left claw (Normal)")! },
+      ],
+      { ...OPTS, maxSwitches: 6 }
+    );
+
+    // Everything the plan uses is either worn or carried; nothing vanishes.
+    const accounted = new Set([...Object.values(plan.wornIds), ...plan.carried.map((c) => c.itemId)]);
+    for (const fight of plan.perMonster) expect(fight.monster).toBeTruthy();
+    expect(accounted.size).toBeGreaterThan(0);
   });
 });

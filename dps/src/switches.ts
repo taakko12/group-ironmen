@@ -367,6 +367,16 @@ function describe(plan: Plan, order: number[], targets: MonsterTarget[]): Switch
     wornId[slot] = bestId;
   }
 
+  // Each slot picks its most-common item independently, which can produce a
+  // set nobody could actually put on: a two-handed weapon alongside a shield,
+  // because the halberd leads one fight and the fang-and-defender another.
+  // `worn` is meant to be what you log in wearing, so the shield loses and
+  // becomes something you carry.
+  if (wornId.weapon !== undefined && equipmentById(wornId.weapon)?.isTwoHanded) {
+    delete worn.shield;
+    delete wornId.shield;
+  }
+
   const carried: { slot: string; name: string; itemId: number }[] = [];
   for (const [slot, ids] of plan.used) {
     for (const id of ids) {
