@@ -88,6 +88,38 @@ async function askerRsn(message) {
   }
 }
 
+// A monster's "versions" are two unrelated things wearing one field, and the
+// calculator's data does not say which is which:
+//
+//   phases you meet in a single kill   -- Zulrah Magma/Serpentine/Tanzanite,
+//                                         Great Olm head/left claw/right claw
+//   encounters you pick between        -- Vorkath Dragon Slayer II/Post-quest,
+//                                         The Leviathan Quest/Post-quest/Awakened
+//
+// Planning switches across all of them is right for the first and wrong for
+// the second: you never fight quest Vorkath and post-quest Vorkath in one
+// trip, so budgeting an inventory slot for it costs a real switch.
+//
+// ponytail: name-matching, because the data offers no flag. The test is run
+// over the whole version list rather than per version, since a monster never
+// mixes the two kinds -- so one recognisable variant marker ("Post-quest")
+// makes its siblings variants too, which is what classifies Vorkath's
+// "Dragon Slayer II" correctly without needing to know it is a quest name.
+const VARIANT_VERSION = /quest|awakened|challenge mode|entry mode|hard mode/i;
+
+function phasesOf(name, matches) {
+  const versions = matches.filter((m) => m.name === name);
+  const areVariants = versions.some((m) => VARIANT_VERSION.test(m.version ?? ''));
+
+  // Variants are fought one at a time, so pick the encounter the group is
+  // actually at: the post-quest version, not the quest fight or its awakened
+  // version.
+  const chosen = areVariants
+    ? [versions.find((m) => /post-quest/i.test(m.version ?? '')) ?? versions[0]]
+    : versions;
+  return chosen.map((m) => ({ name: m.name, version: m.version }));
+}
+
 const builtins = {
   async commands() {
     const custom = customCommands.list();
@@ -183,16 +215,21 @@ const builtins = {
     const { matches } = await search.json();
     if (!matches.length) return `no boss matches "${args}"`;
 
-    const target = { name: matches[0].name, version: matches[0].version };
+    const targets = phasesOf(matches[0].name, matches);
     const response = await fetch(`${DPS_URL}/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: process.env.GROUP_TOKEN },
-      body: JSON.stringify({ member: rsn, targets: [target], budget: 2, weapons: 10 }),
+      body: JSON.stringify({ member: rsn, targets, budget: 6, weapons: 10 }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) return `planner said: ${result.error ?? response.status}`;
 
-    const label = target.version ? `${target.name} [${target.version}]` : target.name;
+    const label =
+      targets.length > 1
+        ? `${targets[0].name} (${targets.length} phases)`
+        : targets[0].version
+          ? `${targets[0].name} [${targets[0].version}]`
+          : targets[0].name;
 
     // Drawn rather than listed: a worn/carry word list makes you translate it
     // in your head, and the equipment panel is how the game already shows it.

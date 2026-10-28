@@ -116,7 +116,7 @@ function drawLabel(ctx, text, x, y) {
 }
 
 async function drawInventory(ctx, carried, left, top) {
-  drawLabel(ctx, `CARRY — ${carried.length} slot${carried.length === 1 ? '' : 's'}`, left, top - 12);
+  drawLabel(ctx, `CARRY — ${carried.length} item${carried.length === 1 ? '' : 's'}`, left, top - 12);
 
   for (let index = 0; index < INV_COLS * INV_ROWS; index += 1) {
     const x = left + (index % INV_COLS) * (CELL + INV_GAP);
@@ -192,8 +192,12 @@ async function renderGearPlan(plan, { member, label }) {
   const showInventory = carried.length > 0;
 
   const title = `${member} vs ${label}`;
+  // `switches` and `carried.length` are different true numbers and printing
+  // both unqualified reads as a contradiction: you bring N items, but peak
+  // bag occupancy is higher, because gear swapped off your back takes a slot
+  // too. Say "at peak" so the grid below is not read as disagreeing.
   const subtitle = showInventory
-    ? `${plan.score.toFixed(2)} avg dps · ${plan.switches} inventory slot${plan.switches === 1 ? '' : 's'}`
+    ? `${plan.score.toFixed(2)} avg dps · ${plan.switches} slot${plan.switches === 1 ? '' : 's'} at peak`
     : `${plan.score.toFixed(2)} dps · no switches`;
   const width = showInventory
     ? WIDTH
