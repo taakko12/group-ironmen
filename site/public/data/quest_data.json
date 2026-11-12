@@ -507,6 +507,36 @@
     "member": true,
     "miniquest": true
   },
+  "17229": {
+    "name": "Daddy's Home",
+    "difficulty": "Novice",
+    "points": "1",
+    "member": true
+  },
+  "17230": {
+    "name": "Mudfoot's Big Adventure",
+    "difficulty": "Novice",
+    "points": "1",
+    "member": false
+  },
+  "17231": {
+    "name": "The Writing's on the Wall",
+    "difficulty": "Intermediate",
+    "points": "1",
+    "member": true
+  },
+  "17315": {
+    "name": "A Shell of a Friend",
+    "difficulty": "Intermediate",
+    "points": "2",
+    "member": true
+  },
+  "17316": {
+    "name": "The Birds and the Wasps",
+    "difficulty": "Novice",
+    "points": "1",
+    "member": true
+  },
   "18": {
     "name": "The Corsair Curse",
     "difficulty": "Intermediate",
@@ -528,13 +558,6 @@
   "20": {
     "name": "Curse of the Empty Lord",
     "difficulty": "Experienced",
-    "points": "0",
-    "member": true,
-    "miniquest": true
-  },
-  "21": {
-    "name": "Daddy's Home",
-    "difficulty": "Novice",
     "points": "0",
     "member": true,
     "miniquest": true
